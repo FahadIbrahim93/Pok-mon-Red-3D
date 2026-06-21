@@ -1,0 +1,6 @@
+{
+  "name": "Pokémon Red 3D Engine",
+  "description": "An enterprise-grade, browser-native 3D recreation of a classic monster-catching RPG engine built with Three.js, React Three Fiber, and Zustand.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
