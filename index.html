@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pokémon Red 3D Game Engine</title>
+    <!-- Sandbox iframe fetch setter patch -->
+    <script>
+      (function() {
+        try {
+          var originalFetch = window.fetch || (typeof globalThis !== 'undefined' ? globalThis.fetch : undefined);
+          if (originalFetch) {
+            var currentFetch = originalFetch;
+            var patchDescriptor = {
+              configurable: true,
+              enumerable: true,
+              get: function() { return currentFetch; },
+              set: function(val) { currentFetch = val; }
+            };
+            Object.defineProperty(window, 'fetch', patchDescriptor);
+            if (typeof globalThis !== 'undefined' && globalThis !== window) {
+              try {
+                Object.defineProperty(globalThis, 'fetch', patchDescriptor);
+              } catch (err) {}
+            }
+          }
+        } catch (e) {
+          console.warn('Sandbox head fetch patch failed:', e);
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/Pok-mon-Red-3D/assets/index-2gk0KgWU.js"></script>
+    <link rel="stylesheet" crossorigin href="/Pok-mon-Red-3D/assets/index-Bise2xk0.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+
