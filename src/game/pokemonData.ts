@@ -261,6 +261,51 @@ export const POKEDEX_CATALOG: Record<string, PokedexEntry> = {
   }
 };
 
+// Returns a list of types for the given Pokémon species name
+export const getPokemonTypes = (name: string): string[] => {
+  const entry = POKEDEX_CATALOG[name.toUpperCase()];
+  return entry ? entry.types : ['NORMAL'];
+};
+
+// Calculates the type multiplier (e.g. 2, 0.5, 1) and status description text
+export const getTypeEffectiveness = (
+  moveType: string,
+  defenderTypes: string[]
+): { multiplier: number; description: string } => {
+  const normMoveType = moveType.toUpperCase();
+  let multiplier = 1;
+
+  const rules: Record<string, Record<string, number>> = {
+    FIRE: { GRASS: 2, BUG: 2, FIRE: 0.5, WATER: 0.5 },
+    WATER: { FIRE: 2, WATER: 0.5, GRASS: 0.5 },
+    GRASS: { WATER: 2, FIRE: 0.5, GRASS: 0.5, POISON: 0.5, FLYING: 0.5, BUG: 0.5 },
+    BUG: { GRASS: 2, FIRE: 0.5, FLYING: 0.5, POISON: 0.5 },
+    FLYING: { GRASS: 2, BUG: 2, ELECTRIC: 0.5 },
+    ELECTRIC: { WATER: 2, FLYING: 2, ELECTRIC: 0.5, GRASS: 0.5 },
+    POISON: { GRASS: 2, POISON: 0.5 },
+    NORMAL: {}
+  };
+
+  const moveRules = rules[normMoveType] || {};
+  for (const defType of defenderTypes) {
+    const normDefType = defType.toUpperCase();
+    if (moveRules[normDefType] !== undefined) {
+      multiplier *= moveRules[normDefType];
+    }
+  }
+
+  let description = '';
+  if (multiplier > 1) {
+    description = "It's super effective!";
+  } else if (multiplier > 0 && multiplier < 1) {
+    description = "It's not very effective...";
+  } else if (multiplier === 0) {
+    description = "It has no effect...";
+  }
+
+  return { multiplier, description };
+};
+
 // Returns a new evolved Pokémon structure if target levels are reached
 export const checkEvolution = (name: string, level: number): string | null => {
   const normName = name.toUpperCase();

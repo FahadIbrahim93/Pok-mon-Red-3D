@@ -80,11 +80,16 @@ export function usePlayerControls() {
 
       const text = getInteraction(targetX, targetZ);
       if (text) {
-        actions.showDialogue(text);
-        
-        // Trigger Quest update when reading the Signpost at (8,4)
-        if (targetX === 8 && targetZ === 4) {
-          actions.triggerReadSign();
+        // Trigger secret trunk rewards at coordinates (1,1)
+        if (targetX === 1 && targetZ === 1) {
+          actions.claimHiddenTreasure();
+        } else {
+          actions.showDialogue(text);
+          
+          // Trigger Quest update when reading the Signpost at (8,4)
+          if (targetX === 8 && targetZ === 4) {
+            actions.triggerReadSign();
+          }
         }
       }
     };

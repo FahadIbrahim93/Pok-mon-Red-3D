@@ -21,6 +21,8 @@ export interface Pokemon {
   maxHp: number;
   moves: Move[];
   color: string;
+  xp?: number;
+  maxXp?: number;
 }
 
 export interface BattleState {
@@ -28,7 +30,14 @@ export interface BattleState {
   playerActiveIndex: number;
   turn: 'PLAYER' | 'OPPONENT' | 'END';
   log: string[];
-  menuState: 'MAIN' | 'FIGHT' | 'ITEM';
+  menuState: 'MAIN' | 'FIGHT' | 'ITEM' | 'VICTORY';
+  victoryRewards?: {
+    xpGained: number;
+    goldEarned: number;
+    leveledUp: boolean;
+    newLevel: number;
+    evolvedName: string | null;
+  } | null;
 }
 
 export interface Quest {
@@ -120,6 +129,15 @@ const createInitialQuests = (): Quest[] => [
     maxProgress: 7,
     completed: false,
     category: 'TRAINING'
+  },
+  {
+    id: 'hidden_treasure',
+    title: 'Secret Collector',
+    description: "Search for a hidden, dust-coated artifact box tucked behind Red's home around (1,1).",
+    progress: 0,
+    maxProgress: 1,
+    completed: false,
+    category: 'EXPLORE'
   }
 ];
 
@@ -183,10 +201,12 @@ interface GameState {
   
   potions: number;
   pokeballs: number;
+  gold: number;
   inventoryItems: InventoryItem[];
   bicycleActive: boolean;
   showTownMap: boolean;
   party: Pokemon[];
+  pcBox: Pokemon[];
   pokedex: Record<string, { seen: boolean; caught: boolean }>;
   battle: BattleState;
 
@@ -194,6 +214,7 @@ interface GameState {
   soundEnabled: boolean;
   bgmEnabled: boolean;
   readSign: boolean;
+  hiddenTreasureClaimed: boolean;
 
   actions: {
     startMove: (dir: Direction, newPos: [number, number]) => void;
@@ -216,9 +237,17 @@ interface GameState {
     gainVictory: () => void;
     resetGame: () => void;
 
+    // PC Storage System actions
+    depositPokemon: (idx: number) => void;
+    withdrawPokemon: (idx: number) => void;
+    releasePokemon: (id: string, isFromParty: boolean) => void;
+    healStoredPokemon: () => void;
+    swapPartyMembers: (idx: number) => void;
+
     toggleSound: () => void;
     toggleBgm: () => void;
     triggerReadSign: () => void;
+    claimHiddenTreasure: () => void;
     
     toggleFavoriteItem: (id: string) => void;
     useOverworldItem: (id: string) => void;
@@ -239,6 +268,7 @@ export const useGameStore = create<GameState>()(
       
       potions: 5,
       pokeballs: 5,
+      gold: 120,
       inventoryItems: createInitialInventory(),
       bicycleActive: false,
       showTownMap: false,
@@ -250,9 +280,41 @@ export const useGameStore = create<GameState>()(
           hp: 20,
           maxHp: 20,
           color: '#ff922b',
+          xp: 0,
+          maxXp: 130,
           moves: [
             { name: 'SCRATCH', power: 4, type: 'NORMAL' },
             { name: 'EMBER', power: 6, type: 'FIRE' }
+          ]
+        }
+      ],
+      pcBox: [
+        {
+          id: 'pc1',
+          name: 'PIDGEY',
+          level: 4,
+          hp: 18,
+          maxHp: 18,
+          color: '#d4a373',
+          xp: 20,
+          maxXp: 110,
+          moves: [
+            { name: 'TACKLE', power: 3, type: 'NORMAL' },
+            { name: 'GUST', power: 4, type: 'FLYING' }
+          ]
+        },
+        {
+          id: 'pc2',
+          name: 'RATTATA',
+          level: 3,
+          hp: 16,
+          maxHp: 16,
+          color: '#be4bdb',
+          xp: 15,
+          maxXp: 90,
+          moves: [
+            { name: 'TACKLE', power: 3, type: 'NORMAL' },
+            { name: 'QUICK ATTACK', power: 4, type: 'NORMAL' }
           ]
         }
       ],
@@ -269,6 +331,7 @@ export const useGameStore = create<GameState>()(
       soundEnabled: true,
       bgmEnabled: true,
       readSign: false,
+      hiddenTreasureClaimed: false,
 
       actions: {
         startMove: (dir, newPos) =>
@@ -456,6 +519,7 @@ export const useGameStore = create<GameState>()(
           const logs = [`You threw a POKéBALL!`, `Wobble...`, `Wobble...`];
           const nextPokedex = { ...state.pokedex };
           const nextParty = [...state.party];
+          const nextPcBox = [...(state.pcBox || [])];
 
           if (captureSuccessful) {
             logs.push(`Gotcha! ${opponent.name} was caught!`);
@@ -472,6 +536,13 @@ export const useGameStore = create<GameState>()(
               });
               logs.push(`${opponent.name} was added to your battle party!`);
             } else {
+              nextPcBox.push({
+                ...opponent,
+                id: Math.random().toString(),
+                hp: opponent.hp > 0 ? opponent.hp : opponent.maxHp,
+                xp: 0,
+                maxXp: opponent.level * 20 + 30
+              });
               logs.push(`${opponent.name} was sent link-transfer to the PC Storage!`);
             }
             // Capture fanfare melody sfx
@@ -488,6 +559,7 @@ export const useGameStore = create<GameState>()(
             inventoryItems: nextItems,
             pokedex: nextPokedex,
             party: nextParty,
+            pcBox: nextPcBox,
             quests: updatedQuests,
             battle: {
               ...state.battle,
@@ -507,37 +579,60 @@ export const useGameStore = create<GameState>()(
 
           const logs: string[] = [];
 
-          // Award active pokemon a level-up for victory!
-          const prevLevel = active.level;
-          const nextLevel = prevLevel + 1;
+          // Dynamic calculation of XP and Gold rewards
+          const xpGained = opponent.level * 25 + Math.floor(Math.random() * 15) + 10;
+          const goldEarned = opponent.level * 15 + Math.floor(Math.random() * 10) + 10;
           
-          active.level = nextLevel;
-          // Scale HP
-          const catalogEntry = POKEDEX_CATALOG[active.name] || POKEDEX_CATALOG.CHARMANDER;
-          active.maxHp = catalogEntry.baseHp + (nextLevel * 2);
-          active.hp = Math.min(active.maxHp, active.hp + 5); // small victory heal!
-
-          logs.push(`${active.name} grew to Level ${nextLevel}!`);
-
-          // Level up chime sfx
-          soundManager.playSFX('level_up');
+          const currentXp = active.xp ?? 0;
+          const currentMaxXp = active.maxXp ?? (active.level * 20 + 30);
+          
+          let nextXp = currentXp + xpGained;
+          let nextMaxXp = currentMaxXp;
+          let nextLevel = active.level;
+          let leveledUp = false;
+          
+          if (nextXp >= currentMaxXp) {
+            nextXp = nextXp - currentMaxXp;
+            nextLevel += 1;
+            nextMaxXp = nextLevel * 20 + 30;
+            leveledUp = true;
+            
+            active.level = nextLevel;
+            // Scale HP
+            const catalogEntry = POKEDEX_CATALOG[active.name] || POKEDEX_CATALOG.CHARMANDER;
+            active.maxHp = catalogEntry.baseHp + (nextLevel * 2);
+            active.hp = Math.min(active.maxHp, active.hp + 5); // small victory heal!
+            
+            logs.push(`${active.name} grew to Level ${nextLevel}!`);
+            soundManager.playSFX('level_up');
+          }
+          
+          active.xp = nextXp;
+          active.maxXp = nextMaxXp;
 
           // Check for Evolution
-          const evolvedSpecies = checkEvolution(active.name, nextLevel);
-          if (evolvedSpecies) {
-            const evoCatalog = POKEDEX_CATALOG[evolvedSpecies];
-            if (evoCatalog) {
-              logs.push(`What? ${active.name} is evolving!`);
-              logs.push(`Congratulations! Your ${active.name} evolved into ${evolvedSpecies}!`);
+          let evolvedSpecies: string | null = null;
+          if (leveledUp) {
+            const possibleEvo = checkEvolution(active.name, nextLevel);
+            if (possibleEvo) {
+              const evoCatalog = POKEDEX_CATALOG[possibleEvo];
+              if (evoCatalog) {
+                logs.push(`What? Your ${active.name} is evolving!`);
+                logs.push(`Congratulations! ${active.name} evolved into ${possibleEvo}!`);
 
-              active.name = evolvedSpecies;
-              active.color = evoCatalog.color;
-              active.maxHp = evoCatalog.baseHp + (nextLevel * 2);
-              active.hp = active.maxHp; // full recovery upon evolution!
-              active.moves = evoCatalog.moves.map(m => ({ ...m }));
+                active.name = possibleEvo;
+                active.color = evoCatalog.color;
+                active.maxHp = evoCatalog.baseHp + (nextLevel * 2);
+                active.hp = active.maxHp; // full recovery upon evolution!
+                active.moves = evoCatalog.moves.map(m => ({ ...m }));
+                active.xp = 0; // reset XP on evolution to keep balance
+                active.maxXp = nextLevel * 20 + 30;
 
-              // Register evolved species as SEEN & CAUGHT in Pokedex
-              nextPokedex[evolvedSpecies] = { seen: true, caught: true };
+                evolvedSpecies = possibleEvo;
+
+                // Register evolved species as SEEN & CAUGHT in Pokedex
+                nextPokedex[possibleEvo] = { seen: true, caught: true };
+              }
             }
           }
 
@@ -547,8 +642,17 @@ export const useGameStore = create<GameState>()(
             party: nextParty,
             pokedex: nextPokedex,
             quests: updatedQuests,
+            gold: (state.gold ?? 120) + goldEarned,
             battle: {
               ...state.battle,
+              menuState: 'VICTORY',
+              victoryRewards: {
+                xpGained,
+                goldEarned,
+                leveledUp,
+                newLevel: nextLevel,
+                evolvedName: evolvedSpecies
+              },
               log: [...state.battle.log, ...logs]
             }
           };
@@ -566,6 +670,7 @@ export const useGameStore = create<GameState>()(
             interactedObject: null,
             potions: 5,
             pokeballs: 5,
+            gold: 120,
             inventoryItems: createInitialInventory(),
             bicycleActive: false,
             showTownMap: false,
@@ -577,6 +682,8 @@ export const useGameStore = create<GameState>()(
                 hp: 20,
                 maxHp: 20,
                 color: '#ff922b',
+                xp: 0,
+                maxXp: 130,
                 moves: [
                   { name: 'SCRATCH', power: 4, type: 'NORMAL' },
                   { name: 'EMBER', power: 6, type: 'FIRE' }
@@ -588,18 +695,159 @@ export const useGameStore = create<GameState>()(
             soundEnabled: true,
             bgmEnabled: true,
             readSign: false,
+            hiddenTreasureClaimed: false,
             battle: {
               opponent: null,
               playerActiveIndex: 0,
               turn: 'PLAYER',
               log: [],
-              menuState: 'MAIN'
-            }
+              menuState: 'MAIN',
+              victoryRewards: null
+            },
+            pcBox: [
+              {
+                id: 'pc1',
+                name: 'PIDGEY',
+                level: 4,
+                hp: 18,
+                maxHp: 18,
+                color: '#d4a373',
+                xp: 20,
+                maxXp: 110,
+                moves: [
+                  { name: 'TACKLE', power: 3, type: 'NORMAL' },
+                  { name: 'GUST', power: 4, type: 'FLYING' }
+                ]
+              },
+              {
+                id: 'pc2',
+                name: 'RATTATA',
+                level: 3,
+                hp: 16,
+                maxHp: 16,
+                color: '#be4bdb',
+                xp: 15,
+                maxXp: 90,
+                moves: [
+                  { name: 'TACKLE', power: 3, type: 'NORMAL' },
+                  { name: 'QUICK ATTACK', power: 4, type: 'NORMAL' }
+                ]
+              }
+            ]
           });
           
           setTimeout(() => {
             soundManager.updateVolumeSettings();
           }, 50);
+        },
+
+        depositPokemon: (idx: number) => {
+          set((state) => {
+            const party = [...state.party];
+            if (party.length <= 1) {
+              return {
+                dialogue: "OAK'S PC SYSTEM: Cannot deposit Pokémon! You must keep at least 1 active partner in your Battle Party."
+              };
+            }
+            const pcBox = [...(state.pcBox || [])];
+            const [deposited] = party.splice(idx, 1);
+            
+            // Auto-heal upon depositing
+            deposited.hp = deposited.maxHp;
+
+            pcBox.push(deposited);
+            soundManager.playSFX('click');
+            return {
+              party,
+              pcBox,
+              dialogue: `OAK'S PC SYSTEM: Sucessfully deposited ${deposited.name} into Box Storage. Its health was fully restored!`
+            };
+          });
+        },
+
+        withdrawPokemon: (idx: number) => {
+          set((state) => {
+            const party = [...state.party];
+            if (party.length >= 6) {
+              return {
+                dialogue: "OAK'S PC SYSTEM: Party is full (Max 6)! Deposit an active Pokémon before withdrawing another partner."
+              };
+            }
+            const pcBox = [...(state.pcBox || [])];
+            const [withdrawn] = pcBox.splice(idx, 1);
+            party.push(withdrawn);
+            soundManager.playSFX('level_up');
+            return {
+              party,
+              pcBox,
+              dialogue: `OAK'S PC SYSTEM: Successfully withdrew ${withdrawn.name} from Box Storage into your Battle Party!`
+            };
+          });
+        },
+
+        releasePokemon: (id: string, isFromParty: boolean) => {
+          set((state) => {
+            let releasedName = '';
+            let nextParty = [...state.party];
+            let nextPcBox = [...(state.pcBox || [])];
+
+            if (isFromParty) {
+              if (nextParty.length <= 1) {
+                return {
+                  dialogue: "OAK'S PC SYSTEM: Unable to release! You cannot release your only active Battle partner!"
+                };
+              }
+              const idx = nextParty.findIndex(p => p.id === id);
+              if (idx !== -1) {
+                releasedName = nextParty[idx].name;
+                nextParty.splice(idx, 1);
+              }
+            } else {
+              const idx = nextPcBox.findIndex(p => p.id === id);
+              if (idx !== -1) {
+                releasedName = nextPcBox[idx].name;
+                nextPcBox.splice(idx, 1);
+              }
+            }
+
+            soundManager.playSFX('click');
+            return {
+              party: nextParty,
+              pcBox: nextPcBox,
+              dialogue: `Red released ${releasedName} into the wild meadows... Bye bye, ${releasedName}!`
+            };
+          });
+        },
+
+        healStoredPokemon: () => {
+          set((state) => {
+            const nextPcBox = (state.pcBox || []).map(p => ({
+              ...p,
+              hp: p.maxHp
+            }));
+            const nextParty = state.party.map(p => ({
+              ...p,
+              hp: p.maxHp
+            }));
+            soundManager.playSFX('heal');
+            return {
+              pcBox: nextPcBox,
+              party: nextParty,
+              dialogue: "OAK'S PC SYSTEM: Initialized full scan and recovery. All Party partners and Box Pokémon were restored to 100% HEALTH!"
+            };
+          });
+        },
+
+        swapPartyMembers: (idx: number) => {
+          set((state) => {
+            const nextParty = [...state.party];
+            if (idx > 0 && idx < nextParty.length) {
+              const temp = nextParty[0];
+              nextParty[0] = nextParty[idx];
+              nextParty[idx] = temp;
+            }
+            return { party: nextParty };
+          });
         },
 
         toggleSound: () => {
@@ -629,6 +877,47 @@ export const useGameStore = create<GameState>()(
             return {
               readSign: true,
               quests: updatedQuests
+            };
+          });
+        },
+
+        claimHiddenTreasure: () => {
+          set((state) => {
+            if (state.hiddenTreasureClaimed) {
+              return {
+                dialogue: "SECRET TRUNK: Red inspected the old box again... There's nothing inside but dry leaves and cobwebs."
+              };
+            }
+            
+            const nextItems = (state.inventoryItems || []).map(item => {
+              if (item.name === 'GREATBALL') {
+                return { ...item, quantity: item.quantity + 3 };
+              }
+              if (item.name === 'MASTERBALL') {
+                return { ...item, quantity: item.quantity + 1 };
+              }
+              if (item.name === 'HYPER_POTION') {
+                return { ...item, quantity: item.quantity + 1 };
+              }
+              return item;
+            });
+            
+            const nextGold = (state.gold ?? 120) + 250;
+            const updatedQuests = state.quests.map(q => {
+              if (q.id === 'hidden_treasure') {
+                return { ...q, progress: 1, completed: true };
+              }
+              return q;
+            });
+
+            soundManager.playSFX('level_up');
+            
+            return {
+              hiddenTreasureClaimed: true,
+              gold: nextGold,
+              inventoryItems: nextItems,
+              quests: updatedQuests,
+              dialogue: "SECRET TRUNK: Red discovered the dusty chest hidden behind his home! Found 3x GREAT BALLS, 1x MASTER BALL, 1x HYPER POTION, and 250 GOLD!"
             };
           });
         },
@@ -737,15 +1026,18 @@ export const useGameStore = create<GameState>()(
         facing: state.facing,
         potions: state.potions,
         pokeballs: state.pokeballs,
+        gold: state.gold,
         inventoryItems: state.inventoryItems,
         bicycleActive: state.bicycleActive,
         showTownMap: state.showTownMap,
         party: state.party,
+        pcBox: state.pcBox,
         pokedex: state.pokedex,
         quests: state.quests,
         soundEnabled: state.soundEnabled,
         bgmEnabled: state.bgmEnabled,
-        readSign: state.readSign
+        readSign: state.readSign,
+        hiddenTreasureClaimed: state.hiddenTreasureClaimed
       })
     }
   )

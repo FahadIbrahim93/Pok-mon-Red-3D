@@ -4,6 +4,7 @@ import { Group, Mesh } from 'three';
 import { useGameStore } from '../../store/gameStore';
 import { mapGrid, TileType } from '../../game/MapData';
 import { generateWildPokemon } from '../../game/pokemonData';
+import { PokemonModel } from './PokemonModel';
 
 const MOVE_SPEED = 5.0; // Units per second
 
@@ -22,8 +23,18 @@ export function Player() {
   const facing = useGameStore((state) => state.facing);
   const actions = useGameStore((state) => state.actions);
   const bicycleActive = useGameStore((state) => state.bicycleActive);
+  const party = useGameStore((state) => state.party);
+  const mode = useGameStore((state) => state.mode);
 
+  const activePokemon = party[0];
   const moveSpeed = bicycleActive ? 8.5 : 5.0;
+
+  // Offsets for active partner trailing behind the Trainer
+  let companionOffset: [number, number, number] = [0, 0, 0];
+  if (facing === 'DOWN') companionOffset = [0, -0.15, 0.95];
+  else if (facing === 'UP') companionOffset = [0, -0.15, -0.95];
+  else if (facing === 'LEFT') companionOffset = [0.95, -0.15, 0];
+  else if (facing === 'RIGHT') companionOffset = [-0.95, -0.15, 0];
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
@@ -214,6 +225,23 @@ export function Player() {
         <circleGeometry args={[0.38, 24]} />
         <meshBasicMaterial color="#1864ab" opacity={0.34} transparent />
       </mesh>
+
+      {/* 3D Active Companion Follower trailing behind Trainer Red */}
+      {activePokemon && mode === 'OVERWORLD' && (
+        <group position={companionOffset}>
+          <PokemonModel
+            name={activePokemon.name}
+            color={activePokemon.color}
+            state={isMoving ? 'WALK' : 'IDLE'}
+            scale={0.65}
+          />
+          {/* Sibling Shadow for Follower */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
+            <circleGeometry args={[0.26, 16]} />
+            <meshBasicMaterial color="#092a4a" opacity={0.31} transparent />
+          </mesh>
+        </group>
+      )}
     </group>
   );
 }

@@ -3,6 +3,9 @@ import { useGameStore, Move } from '../../store/gameStore';
 import { ChevronRight, ShieldAlert, Zap, Swords, Sparkles, Heart } from 'lucide-react';
 import { Canvas } from '@react-three/fiber';
 import { PokemonModel } from '../3d/PokemonModel';
+import { motion } from 'motion/react';
+import { AttackParticles } from '../3d/AttackParticles';
+import { getTypeEffectiveness, getPokemonTypes } from '../../game/pokemonData';
 
 export function BattleUI() {
   const mode = useGameStore(state => state.mode);
@@ -23,6 +26,9 @@ export function BattleUI() {
   // Floating numbers state
   const [floater, setFloater] = useState<{ text: string; isHeal: boolean; key: number } | null>(null);
 
+  const [playerActionType, setPlayerActionType] = useState<string>('NORMAL');
+  const [opponentActionType, setOpponentActionType] = useState<string>('NORMAL');
+
   const activePokemon = party[battle.playerActiveIndex];
   const { opponent, menuState, log, turn } = battle;
 
@@ -34,6 +40,17 @@ export function BattleUI() {
     if (mode !== 'BATTLE') return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (menuState === 'VICTORY') {
+        if (e.key === 'z' || e.key === ' ' || e.key === 'Enter') {
+          if (log.length > 0) {
+            actions.shiftBattleLog();
+          } else {
+            actions.endBattle();
+          }
+        }
+        return;
+      }
+
       if (turn !== 'PLAYER') return;
       if (log.length > 0) {
         if (e.key === 'z' || e.key === ' ' || e.key === 'Enter') {
@@ -89,13 +106,22 @@ export function BattleUI() {
           const timer = setTimeout(() => {
               if (opponent) {
                   const move = opponent.moves[Math.floor(Math.random() * opponent.moves.length)];
+                  setOpponentActionType(move.type);
+
+                  const defenderTypes = getPokemonTypes(activePokemon.name);
+                  const { multiplier, description: typeDesc } = getTypeEffectiveness(move.type, defenderTypes);
+                  const calculatedDamage = Math.max(1, Math.round(move.power * multiplier));
+
                   actions.addBattleLog(`Enemy ${opponent.name} used ${move.name}!`);
+                  if (typeDesc) {
+                      actions.addBattleLog(typeDesc);
+                  }
                   
                   setTimeout(() => {
                       // Trigger Flash & Shake player
                       setScreenFlash(true);
                       setPlayerDamaged(true);
-                      triggerFloater(`-${move.power} HP`, false);
+                      triggerFloater(`-${calculatedDamage} HP`, false);
                       setActiveCombatEffect('scratch');
 
                       setTimeout(() => {
@@ -104,7 +130,7 @@ export function BattleUI() {
                         setActiveCombatEffect(null);
                       }, 400);
 
-                      actions.applyDamage('PLAYER', move.power);
+                      actions.applyDamage('PLAYER', calculatedDamage);
                       const state = useGameStore.getState();
                       const p = state.party[state.battle.playerActiveIndex];
                       
@@ -125,25 +151,26 @@ export function BattleUI() {
           }, 800);
           return () => clearTimeout(timer);
       }
-  }, [mode, turn, opponent]);
+  }, [mode, turn, opponent, activePokemon]);
 
-  const handleSelect = () => {
+  const handleSelect = (idx?: number) => {
+      const actualIdx = idx !== undefined ? idx : cursorIdx;
       if (menuState === 'MAIN') {
-          if (cursorIdx === 0) { 
+          if (actualIdx === 0) { 
             actions.setBattleMenuState('FIGHT'); 
             setCursorIdx(0); 
-          } else if (cursorIdx === 1) { 
+          } else if (actualIdx === 1) { 
             actions.addBattleLog("There's no time to switch Pokémon!");
-          } else if (cursorIdx === 2) { 
+          } else if (actualIdx === 2) { 
             // Enter Bag Submenu
             actions.setBattleMenuState('ITEM'); 
             setCursorIdx(0);
-          } else if (cursorIdx === 3) { // RUN
+          } else if (actualIdx === 3) { // RUN
              actions.addBattleLog("Got away safely!");
              setTimeout(() => { actions.endBattle(); }, 1500);
           }
       } else if (menuState === 'ITEM') {
-          if (cursorIdx === 0) { // POTION
+          if (actualIdx === 0) { // POTION
              if (potions > 0) {
                  actions.usePotion();
                  actions.healPlayer(20);
@@ -155,7 +182,7 @@ export function BattleUI() {
              } else {
                  actions.addBattleLog("You don't have any POTIONs left!");
              }
-          } else if (cursorIdx === 1) { // POKéBALL
+          } else if (actualIdx === 1) { // POKéBALL
              if (pokeballs > 0) {
                  // Trigger full pokeball throw sequence in core store
                  actions.usePokeball();
@@ -179,15 +206,25 @@ export function BattleUI() {
              }
           }
       } else if (menuState === 'FIGHT') {
-          const move = activePokemon.moves[cursorIdx];
+          const move = activePokemon.moves[actualIdx];
+          if (!move) return;
+          setPlayerActionType(move.type);
+
+          const defenderTypes = opponent ? getPokemonTypes(opponent.name) : ['NORMAL'];
+          const { multiplier, description: typeDesc } = getTypeEffectiveness(move.type, defenderTypes);
+          const calculatedDamage = Math.max(1, Math.round(move.power * multiplier));
+
           actions.addBattleLog(`${activePokemon.name} used ${move.name}!`);
+          if (typeDesc) {
+              actions.addBattleLog(typeDesc);
+          }
           actions.setTurn('END'); // wait for damage
 
           setTimeout(() => {
              // Shake opponent, trigger flash of screen
              setScreenFlash(true);
              setOpponentDamaged(true);
-             triggerFloater(`-${move.power} HP`, false);
+             triggerFloater(`-${calculatedDamage} HP`, false);
              setActiveCombatEffect(move.type === 'FIRE' ? 'fire-burst' : 'slash-spark');
 
              setTimeout(() => {
@@ -196,7 +233,7 @@ export function BattleUI() {
                setActiveCombatEffect(null);
              }, 500);
 
-             actions.applyDamage('OPPONENT', move.power);
+             actions.applyDamage('OPPONENT', calculatedDamage);
              const state = useGameStore.getState();
              
              if (state.battle.opponent && state.battle.opponent.hp <= 0) {
@@ -205,10 +242,6 @@ export function BattleUI() {
                    
                    // Gaining victory level-up & evolving experience!
                    actions.gainVictory();
-                   
-                   setTimeout(() => { 
-                     actions.endBattle(); 
-                   }, 3200);
                  }, 400);
              } else {
                  actions.setTurn('OPPONENT');
@@ -241,6 +274,104 @@ export function BattleUI() {
         <div className="absolute inset-0 bg-white z-50 pointer-events-none animate-flash duration-200" />
       )}
 
+      {/* State-of-the-art Victory Modal */}
+      {menuState === 'VICTORY' && (
+        <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center p-4 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)]">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", duration: 0.5 }}
+            className="w-full max-w-sm bg-slate-900 border-4 border-yellow-400 p-6 rounded-2xl shadow-2xl relative flex flex-col gap-6"
+          >
+            {/* Header */}
+            <div className="flex flex-col items-center text-center gap-1">
+              <motion.div 
+                animate={{ rotate: [0, 10, -10, 0] }}
+                transition={{ repeat: Infinity, duration: 4 }}
+                className="w-14 h-14 rounded-full bg-gradient-to-tr from-yellow-300 to-amber-500 flex items-center justify-center shadow-lg"
+              >
+                <Sparkles className="text-slate-950" size={28} />
+               </motion.div>
+              <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 tracking-wider">VICTORY</h2>
+              <p className="text-slate-400 text-[10px]">WILD POKÉMON DEFEATED</p>
+            </div>
+
+            {/* Reward Summary */}
+            <div className="bg-slate-950/80 rounded-xl p-4 border border-slate-700/50 flex flex-col gap-3 font-mono">
+              <div className="flex items-center justify-between text-slate-300">
+                <span className="text-xs font-bold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-yellow-400" />
+                  XP GAINED
+                </span>
+                <span className="text-base font-extrabold text-yellow-300">+{battle.victoryRewards?.xpGained ?? 45} XP</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-300">
+                <span className="text-xs font-bold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  GOLD EARNED
+                </span>
+                <span className="text-base font-extrabold text-emerald-400">+{battle.victoryRewards?.goldEarned ?? 25}g</span>
+              </div>
+            </div>
+
+            {/* Level up / Evolution states */}
+            {battle.victoryRewards?.leveledUp && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="bg-sky-950/50 border-2 border-sky-400/80 rounded-xl p-3 flex flex-col items-center gap-1"
+              >
+                <span className="text-[#a5d8ff] text-xs font-black tracking-widest animate-pulse">LEVEL UP!</span>
+                <span className="text-slate-200 text-xs text-center">
+                  Your <strong className="text-sky-300">{activePokemon.name}</strong> grew to <strong className="text-sky-300">Level {battle.victoryRewards?.newLevel}</strong>!
+                </span>
+              </motion.div>
+            )}
+
+            {battle.victoryRewards?.evolvedName && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+                className="bg-fuchsia-950/50 border-2 border-fuchsia-400/80 rounded-xl p-3 flex flex-col items-center gap-1"
+              >
+                <span className="text-[#f5b3f3] text-xs font-black tracking-widest animate-pulse">EVOLUTION!</span>
+                <span className="text-slate-200 text-xs text-center">
+                  What? Congratulations! Your partner evolved into <strong className="text-fuchsia-300">{battle.victoryRewards?.evolvedName}</strong>!
+                </span>
+              </motion.div>
+            )}
+
+            {/* Active Pokemon Status / XP bar */}
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-slate-400 font-bold">{activePokemon.name}</span>
+                <span className="text-slate-400">
+                  {activePokemon.xp ?? 0} / {activePokemon.maxXp ?? 100} XP
+                </span>
+              </div>
+              <div className="w-full bg-slate-950 h-3 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, ((activePokemon.xp ?? 0) / (activePokemon.maxXp ?? 130)) * 100)}%` }}
+                  transition={{ delay: 0.2, duration: 1 }}
+                  className="h-full rounded-full bg-gradient-to-r from-yellow-400 to-amber-500 shadow-[0_0_8px_rgba(251,191,36,0.5)]"
+                />
+              </div>
+            </div>
+
+            {/* Claim button */}
+            <button 
+              onClick={() => actions.endBattle()}
+              className="w-full bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-slate-950 font-black tracking-widest py-3 px-6 rounded-xl shadow-lg hover:shadow-yellow-500/20 active:scale-95 transition-all text-center uppercase border-b-4 border-amber-600 font-mono cursor-pointer"
+            >
+              Back to Town (Z)
+            </button>
+          </motion.div>
+        </div>
+      )}
+
       {/* Dynamic Battle Zone Arena */}
       <div className="flex-1 flex flex-col relative overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
          
@@ -255,7 +386,12 @@ export function BattleUI() {
                          <div className="text-right text-[#ced4da] font-black text-xs px-2 py-0.5 rounded bg-slate-800">Lv{opponent.level}</div>
                      </div>
                      <div className="w-full bg-slate-950/70 h-3 mt-3 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
-                         <div className={`h-full rounded-full transition-all duration-500 ${getHpColor(opponent.hp, opponent.maxHp)}`} style={{ width: `${Math.max(0, (opponent.hp / opponent.maxHp) * 100)}%` }} />
+                         <motion.div 
+                           className={`h-full rounded-full ${getHpColor(opponent.hp, opponent.maxHp)}`}
+                           initial={{ width: `${Math.max(0, (opponent.hp / opponent.maxHp) * 100)}%` }}
+                           animate={{ width: `${Math.max(0, (opponent.hp / opponent.maxHp) * 100)}%` }}
+                           transition={{ type: "spring", stiffness: 60, damping: 14 }}
+                         />
                      </div>
                      <div className="flex items-center justify-between mt-1.5 text-xs text-slate-400 font-bold">
                          <span>HP METER</span>
@@ -292,6 +428,7 @@ export function BattleUI() {
                          isBackView={false}
                          scale={1.4} 
                        />
+                       <AttackParticles type={playerActionType} active={opponentDamaged} />
                      </Canvas>
                    </div>
 
@@ -364,6 +501,7 @@ export function BattleUI() {
                          isBackView={true} 
                          scale={1.4} 
                        />
+                       <AttackParticles type={opponentActionType} active={playerDamaged} />
                      </Canvas>
                    </div>
 
@@ -392,7 +530,12 @@ export function BattleUI() {
                          <div className="text-right text-[#ced4da] font-black text-xs px-2 py-0.5 rounded bg-slate-800">Lv{activePokemon.level}</div>
                      </div>
                      <div className="w-full bg-slate-950/70 h-3 mt-3 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
-                         <div className={`h-full rounded-full transition-all duration-500 ${getHpColor(activePokemon.hp, activePokemon.maxHp)}`} style={{ width: `${Math.max(0, (activePokemon.hp / activePokemon.maxHp) * 100)}%` }} />
+                         <motion.div 
+                           className={`h-full rounded-full ${getHpColor(activePokemon.hp, activePokemon.maxHp)}`}
+                           initial={{ width: `${Math.max(0, (activePokemon.hp / activePokemon.maxHp) * 100)}%` }}
+                           animate={{ width: `${Math.max(0, (activePokemon.hp / activePokemon.maxHp) * 100)}%` }}
+                           transition={{ type: "spring", stiffness: 60, damping: 14 }}
+                         />
                      </div>
                      <div className="flex items-center justify-between mt-2 text-xs font-bold font-mono">
                          <div className="flex items-center gap-1 text-slate-400">
@@ -430,7 +573,7 @@ export function BattleUI() {
              {!currentLog && (
                  <div className="grid grid-cols-2 gap-3 p-4 h-full text-base sm:text-lg font-black uppercase text-slate-200">
                      {menuState === 'MAIN' && [
-                         <button key="FIGHT" className={`flex items-center gap-2 justify-start px-4 py-2 border-2 rounded-xl transition-all cursor-pointer ${cursorIdx === 0 ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg' : 'bg-slate-800/80 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(0); handleSelect(); }}>
+                         <button key="FIGHT" className={`flex items-center gap-2 justify-start px-4 py-2 border-2 rounded-xl transition-all cursor-pointer ${cursorIdx === 0 ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg' : 'bg-slate-800/80 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(0); handleSelect(0); }}>
                              <span className="w-4 flex items-center">{cursorIdx === 0 ? <ChevronRight size={18} /> : ''}</span>
                              <Swords size={16} className={cursorIdx === 0 ? 'text-yellow-300' : 'text-slate-400'} />
                              <span>FIGHT</span>
@@ -439,26 +582,26 @@ export function BattleUI() {
                              <span className="w-4"></span>
                              <span><s>PKMN</s></span>
                          </button>,
-                         <button key="ITEM" className={`flex items-center gap-2 justify-start px-4 py-2 border-2 rounded-xl transition-all cursor-pointer ${cursorIdx === 2 ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg' : 'bg-slate-800/80 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(2); handleSelect(); }}>
+                         <button key="ITEM" className={`flex items-center gap-2 justify-start px-4 py-2 border-2 rounded-xl transition-all cursor-pointer ${cursorIdx === 2 ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg' : 'bg-slate-800/80 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(2); handleSelect(2); }}>
                              <span className="w-4 flex items-center">{cursorIdx === 2 ? <ChevronRight size={18} /> : ''}</span>
                              <Sparkles size={16} className={cursorIdx === 2 ? 'text-yellow-300 animate-pulse' : 'text-slate-400'} />
                              <span>BAG</span>
                          </button>,
-                         <button key="RUN" className={`flex items-center gap-2 justify-start px-4 py-2 border-2 rounded-xl transition-all cursor-pointer ${cursorIdx === 3 ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg' : 'bg-slate-800/80 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(3); handleSelect(); }}>
+                         <button key="RUN" className={`flex items-center gap-2 justify-start px-4 py-2 border-2 rounded-xl transition-all cursor-pointer ${cursorIdx === 3 ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg' : 'bg-slate-800/80 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(3); handleSelect(3); }}>
                              <span className="w-4 flex items-center">{cursorIdx === 3 ? <ChevronRight size={18} /> : ''}</span>
                              <span>RUN</span>
                          </button>,
                      ]}
                      
                      {menuState === 'ITEM' && [
-                         <button key="POTION" className={`flex items-center justify-between px-4 py-2 border-2 rounded-xl transition-all cursor-pointer col-span-2 ${cursorIdx === 0 ? 'bg-[#96f2d7] text-[#0ca678] border-[#38d9a9] shadow-lg' : 'bg-slate-800 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(0); handleSelect(); }}>
+                         <button key="POTION" className={`flex items-center justify-between px-4 py-2 border-2 rounded-xl transition-all cursor-pointer col-span-2 ${cursorIdx === 0 ? 'bg-[#96f2d7] text-[#0ca678] border-[#38d9a9] shadow-lg' : 'bg-slate-800 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(0); handleSelect(0); }}>
                              <span className="flex items-center gap-2">
                                  <span className="w-4 flex items-center">{cursorIdx === 0 ? <ChevronRight size={18} /> : ''}</span>
                                  <span>POTION (HEALS 20HP)</span>
                              </span>
                              <span className="text-xs bg-slate-900 px-2.5 py-1 rounded-md text-slate-300 border border-slate-700">QTY: {potions}</span>
                          </button>,
-                         <button key="POKEBALL" className={`flex items-center justify-between px-4 py-2 border-2 rounded-xl transition-all cursor-pointer col-span-2 ${cursorIdx === 1 ? 'bg-[#96f2d7] text-[#0ca678] border-[#38d9a9] shadow-lg' : 'bg-slate-800 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(1); handleSelect(); }}>
+                         <button key="POKEBALL" className={`flex items-center justify-between px-4 py-2 border-2 rounded-xl transition-all cursor-pointer col-span-2 ${cursorIdx === 1 ? 'bg-[#96f2d7] text-[#0ca678] border-[#38d9a9] shadow-lg' : 'bg-slate-800 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(1); handleSelect(1); }}>
                              <span className="flex items-center gap-2">
                                  <span className="w-4 flex items-center">{cursorIdx === 1 ? <ChevronRight size={18} /> : ''}</span>
                                  <span>POKéBALL (70% CATCH)</span>
@@ -472,7 +615,7 @@ export function BattleUI() {
 
                      {menuState === 'FIGHT' && [
                          ...activePokemon.moves.map((m, i) => (
-                             <button key={m.name} className={`flex items-center justify-between px-4 py-2 border-2 rounded-xl transition-all cursor-pointer col-span-2 ${cursorIdx === i ? 'bg-[#96f2d7] text-[#0ca678] border-[#38d9a9] shadow-lg' : 'bg-slate-800 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(i); handleSelect(); }}>
+                             <button key={m.name} className={`flex items-center justify-between px-4 py-2 border-2 rounded-xl transition-all cursor-pointer col-span-2 ${cursorIdx === i ? 'bg-[#96f2d7] text-[#0ca678] border-[#38d9a9] shadow-lg' : 'bg-slate-800 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(i); handleSelect(i); }}>
                                  <span className="flex items-center gap-2">
                                      <span className="w-4 flex items-center">{cursorIdx === i ? <ChevronRight size={18} /> : ''}</span>
                                      <span>{m.name}</span>

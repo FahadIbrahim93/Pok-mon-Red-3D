@@ -5,7 +5,7 @@ import { Group, Mesh } from 'three';
 interface PokemonModelProps {
   name: string;
   color: string;
-  state?: 'IDLE' | 'ATTACK' | 'HIT' | 'FAINTED';
+  state?: 'IDLE' | 'WALK' | 'ATTACK' | 'HIT' | 'FAINTED';
   isBackView?: boolean;
   scale?: number;
 }
@@ -57,21 +57,31 @@ export function PokemonModel({
         const breathScale = 1.0 + Math.sin(time * 2.5) * 0.015;
         bodyRef.current.scale.set(breathScale, breathScale, breathScale);
       }
+    } else if (state === 'WALK') {
+      // Energetic cute hopping when active walking
+      const hopFreq = 11;
+      const hopAmp = 0.09;
+      groupRef.current.position.y = Math.abs(Math.sin(time * hopFreq)) * hopAmp;
     }
 
     // 2. Wing Flap animation
     if (leftWingRef.current && rightWingRef.current) {
-      const flapSpeed = isBird ? 12 : 6;
-      const flapAngle = Math.sin(time * flapSpeed) * 0.35 + 0.1;
+      const flapSpeed = state === 'WALK' ? 16 : (isBird ? 12 : 6);
+      const flapAngle = Math.sin(time * flapSpeed) * (state === 'WALK' ? 0.45 : 0.35) + 0.1;
       leftWingRef.current.rotation.z = -flapAngle;
       rightWingRef.current.rotation.z = flapAngle;
     }
 
     // 3. Legs cycle if moving state or gentle hop
     if (leftLegRef.current && rightLegRef.current) {
-      const legSpeed = 8;
-      leftLegRef.current.rotation.x = Math.sin(time * legSpeed) * 0.25;
-      rightLegRef.current.rotation.x = -Math.sin(time * legSpeed) * 0.25;
+      if (state === 'WALK') {
+        const legSpeed = 12;
+        leftLegRef.current.rotation.x = Math.sin(time * legSpeed) * 0.35;
+        rightLegRef.current.rotation.x = -Math.sin(time * legSpeed) * 0.35;
+      } else {
+        leftLegRef.current.rotation.x = 0;
+        rightLegRef.current.rotation.x = 0;
+      }
     }
 
     // 4. Tail sway movement

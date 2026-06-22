@@ -10,20 +10,6 @@ export function Scene() {
 
   return (
     <Canvas shadows camera={{ position: [0, 10, 10], fov: 45 }}>
-      {/* Lighting */}
-      <ambientLight intensity={0.6} />
-      <directionalLight
-        position={[10, 20, 10]}
-        intensity={1.2}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-left={-20}
-        shadow-camera-right={20}
-        shadow-camera-top={20}
-        shadow-camera-bottom={-20}
-      />
-
       <CameraController />
       <World />
       <Player />
