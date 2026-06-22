@@ -52,7 +52,9 @@ export interface BattleState {
   opponentStatus: StatusEffect;
   playerStatStages: StatStages;
   opponentStatStages: StatStages;
-  sleepTurns: number; // tracks remaining sleep turns for active battler
+  sleepTurns: number;
+  battleType: 'WILD' | 'TRAINER';
+  trainerName?: string;
   victoryRewards?: {
     xpGained: number;
     goldEarned: number;
@@ -70,6 +72,8 @@ const BATTLE_BASE = {
   playerStatStages: { atk: 0, def: 0, spd: 0, acc: 0 } as StatStages,
   opponentStatStages: { atk: 0, def: 0, spd: 0, acc: 0 } as StatStages,
   sleepTurns: 0,
+  battleType: 'WILD' as 'WILD' | 'TRAINER',
+  trainerName: undefined as string | undefined,
 };
 
 export interface Quest {
@@ -265,6 +269,7 @@ interface GameState {
   metOak: boolean;
   readSign: boolean;
   hiddenTreasureClaimed: boolean;
+  defeatedTrainers: string[];
 
   actions: {
     startMove: (dir: Direction, newPos: [number, number]) => void;
@@ -274,6 +279,7 @@ interface GameState {
     clearDialogue: () => void;
     
     startBattle: (opponent: Pokemon) => void;
+    startTrainerBattle: (opponent: Pokemon, trainerName: string) => void;
     endBattle: () => void;
     setBattleMenuState: (menuState: BattleState['menuState']) => void;
     addBattleLog: (message: string) => void;
@@ -376,11 +382,12 @@ export const useGameStore = create<GameState>()(
       soundEnabled: true,
       bgmEnabled: true,
       readSign: false,
-      hiddenTreasureClaimed: false,
-      starterChosen: false,
-      showStarterModal: false,
-      centerHealing: 'IDLE',
-      metOak: false,
+  hiddenTreasureClaimed: false,
+  starterChosen: false,
+  showStarterModal: false,
+  centerHealing: 'IDLE',
+  metOak: false,
+  defeatedTrainers: [],
 
       actions: {
         startMove: (dir, newPos) =>
@@ -501,11 +508,62 @@ export const useGameStore = create<GameState>()(
           });
         },
 
+        startTrainerBattle: (opponent, trainerName) => {
+          set((state) => {
+            const nextPokedex = { ...state.pokedex };
+            if (!nextPokedex[opponent.name]) {
+              nextPokedex[opponent.name] = { seen: true, caught: false };
+            } else {
+              nextPokedex[opponent.name].seen = true;
+            }
+
+            // Sync music
+            soundManager.playSFX('hit');
+            setTimeout(() => {
+              soundManager.syncBGMWithState();
+            }, 60);
+
+            const updatedQuests = syncQuests(state.quests, state.party, nextPokedex, state.position, state.readSign, state.starterChosen);
+
+            return {
+              mode: 'BATTLE',
+              pokedex: nextPokedex,
+              quests: updatedQuests,
+              battle: {
+                ...BATTLE_BASE,
+                opponent,
+                playerActiveIndex: 0,
+                turn: 'PLAYER',
+                battleType: 'TRAINER',
+                trainerName,
+                log: [`${trainerName} sent out ${opponent.name}!`],
+                menuState: 'MAIN'
+              }
+            };
+          });
+        },
+
         endBattle: () => set((state) => {
             const party = [...state.party];
             // Safe fallback heals to let players continue
             if (party[0] && party[0].hp <= 0) {
               party[0].hp = Math.floor(party[0].maxHp * 0.5);
+            }
+
+            // Register defeated trainer and show post-battle dialogue
+            let dialogue: string | null = null;
+            let defeatedTrainers = state.defeatedTrainers;
+            const trainerName = state.battle.trainerName;
+            if (trainerName && !defeatedTrainers.includes(trainerName)) {
+              defeatedTrainers = [...defeatedTrainers, trainerName];
+              // Show trainer defeat dialogue if player won (party alive)
+              if (party[0] && party[0].hp > 0) {
+                if (trainerName === 'RIVAL GARY') {
+                  dialogue = "RIVAL GARY: 'Argh! You got lucky, Red! I'll train even harder and beat you next time! Smell ya later!'";
+                } else {
+                  dialogue = `${trainerName}: 'You're pretty strong... I'll get you next time!'`;
+                }
+              }
             }
             
             // Sync music
@@ -519,6 +577,8 @@ export const useGameStore = create<GameState>()(
               mode: 'OVERWORLD', 
               battle: { ...state.battle, opponent: null, log: [] },
               party,
+              defeatedTrainers,
+              dialogue,
               quests: updatedQuests
             };
         }),
@@ -616,6 +676,7 @@ export const useGameStore = create<GameState>()(
 
         usePokeball: () => set((state) => {
           if (state.pokeballs <= 0 || !state.battle.opponent) return state;
+          if (state.battle.battleType === 'TRAINER') return state;
 
           const opponent = state.battle.opponent;
           const nextPokeballs = state.pokeballs - 1;
@@ -1296,7 +1357,8 @@ export const useGameStore = create<GameState>()(
         metOak: state.metOak,
         readSign: state.readSign,
         hiddenTreasureClaimed: state.hiddenTreasureClaimed,
-        starterChosen: state.starterChosen
+        starterChosen: state.starterChosen,
+        defeatedTrainers: state.defeatedTrainers
       })
     }
   )

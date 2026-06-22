@@ -2,6 +2,7 @@ import { KeyboardEvent, useEffect } from 'react';
 import { useGameStore, Direction } from '../store/gameStore';
 import { checkCollision, getInteraction } from './MapData';
 import { soundManager } from './soundManager';
+import { generateRivalTeam } from './pokemonData';
 
 export function usePlayerControls() {
   const { position, targetPosition, isMoving, facing, dialogue, actions } = useGameStore();
@@ -29,6 +30,15 @@ export function usePlayerControls() {
         }
         if (e.key === 'z' || e.key === 'x' || e.key === 'Enter' || e.key === ' ') {
           actions.clearDialogue();
+          // Check if there's a pending rival battle after clearing dialogue
+          const pending = (window as any).__pendingRivalBattle;
+          const opponent = (window as any).__rivalOpponent;
+          // Always clear pending battle flags
+          (window as any).__pendingRivalBattle = false;
+          (window as any).__rivalOpponent = null;
+          if (pending && opponent) {
+            actions.startTrainerBattle(opponent, 'RIVAL GARY');
+          }
         }
         return;
       }
@@ -99,6 +109,31 @@ export function usePlayerControls() {
           actions.claimHiddenTreasure();
         } else {
           const state = useGameStore.getState();
+          // Rival Gary battle — check if already defeated or player has no Pokémon
+          if (targetX === 10 && targetZ === 5) {
+            if (state.defeatedTrainers.includes('GARY')) {
+              actions.showDialogue("RIVAL GARY: 'What are you looking at? I already beat you once! Smell ya later!'");
+              return;
+            }
+            if (state.party.length === 0) {
+              actions.showDialogue("RIVAL GARY: 'Ha! You don't even have a Pokémon yet? Go see Gramps Oak first, loser!'");
+              return;
+            }
+            // Show challenge dialogue, then start battle after player dismisses it
+            const playerStarter = state.party[0].name;
+            const rivalTeam = generateRivalTeam(playerStarter);
+            const rivalMon = rivalTeam[0];
+            actions.showDialogue(
+              `RIVAL GARY: 'Hey Red! Check out my ${rivalMon.name}! It's way stronger than yours! Let's battle right now!'
+
+[Press Z to accept the challenge!]`
+            );
+            // Store the rival data so battle starts after dialogue dismiss
+            (window as any).__pendingRivalBattle = true;
+            (window as any).__rivalOpponent = rivalMon;
+            return;
+          }
+          
           // Check if we're interacting with Oak's Starter Table and starter not chosen
           if (targetX === 8 && targetZ === 7 && state.party.length === 0) {
             actions.openStarterModal();

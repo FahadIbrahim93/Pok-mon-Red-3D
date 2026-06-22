@@ -1633,6 +1633,61 @@ export const ENCOUNTER_TABLES: Record<string, EncounterTable> = {
   }
 };
 
+// Generate Rival Gary's team based on player's starter choice
+// Gary picks the starter with a type advantage over the player
+export const generateRivalTeam = (playerStarterName: string): Pokemon[] => {
+  let rivalStarterName: string;
+  let rivalLevel = 7;
+
+  // Pick the counter-starter (type advantage)
+  if (playerStarterName === 'BULBASAUR') {
+    rivalStarterName = 'CHARMANDER'; // Fire beats Grass
+  } else if (playerStarterName === 'CHARMANDER') {
+    rivalStarterName = 'SQUIRTLE'; // Water beats Fire
+  } else if (playerStarterName === 'SQUIRTLE') {
+    rivalStarterName = 'BULBASAUR'; // Grass beats Water
+  } else {
+    rivalStarterName = 'EEVEE'; // Fallback
+  }
+
+  const catalogEntry = POKEDEX_CATALOG[rivalStarterName];
+  if (!catalogEntry) {
+    // Fallback to Eevee
+    const fallback = POKEDEX_CATALOG.EEVEE;
+    const maxHp = fallback.baseHp + (rivalLevel * 2);
+    return [{
+      id: 'rival_1',
+      name: 'EEVEE',
+      level: rivalLevel,
+      hp: maxHp,
+      maxHp: maxHp,
+      color: fallback.color,
+      moves: [
+        { name: 'TACKLE', power: 4, type: 'NORMAL', category: 'PHYSICAL' },
+        { name: 'QUICK ATTACK', power: 5, type: 'NORMAL', category: 'PHYSICAL' }
+      ] as Move[]
+    }];
+  }
+
+  // Build moves with proper category from the catalog (default PHYSICAL)
+  const rivalMoves = catalogEntry.moves.slice(0, 2).map(m => ({
+    ...m,
+    category: 'PHYSICAL' as const
+  })) as Move[];
+
+  const maxHp = catalogEntry.baseHp + (rivalLevel * 2);
+
+  return [{
+    id: 'rival_1',
+    name: catalogEntry.name,
+    level: rivalLevel,
+    hp: maxHp,
+    maxHp: maxHp,
+    color: catalogEntry.color,
+    moves: rivalMoves
+  }];
+};
+
 // Generate a wild Pokémon from a specific encounter table
 export const generateWildPokemon = (tableKey?: string): Pokemon => {
   let table = ENCOUNTER_TABLES.GRASS_PALLET;

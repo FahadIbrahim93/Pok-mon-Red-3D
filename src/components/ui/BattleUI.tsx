@@ -42,7 +42,7 @@ export function BattleUI() {
   const [opponentActionType, setOpponentActionType] = useState<string>('NORMAL');
 
   const activePokemon = party[battle.playerActiveIndex];
-  const { opponent, menuState, log, turn } = battle;
+  const { opponent, menuState, log, turn, battleType, trainerName } = battle;
 
   const triggerFloater = (text: string, isHeal: boolean) => {
     setFloater({ text, isHeal, key: Date.now() });
@@ -97,8 +97,13 @@ export function BattleUI() {
         case 'x':
         case 'Backspace':
           if (menuState !== 'MAIN') {
-             actions.setBattleMenuState('MAIN');
-             setCursorIdx(0);
+             // If active fainted and in SWITCH menu, don't allow going back to MAIN
+             if (menuState === 'SWITCH' && activePokemon && activePokemon.hp <= 0) {
+               actions.addBattleLog(`${activePokemon.name} can't battle! Choose a replacement!`);
+             } else {
+               actions.setBattleMenuState('MAIN');
+               setCursorIdx(0);
+             }
           }
           break;
         case 'z':
@@ -114,6 +119,7 @@ export function BattleUI() {
   }, [mode, turn, log, menuState, cursorIdx, activePokemon]);
 
   // Track which turn's status effects have been processed
+  const isTrainerBattle = battleType === 'TRAINER';
   const lastProcessedTurn = useRef<'PLAYER' | 'OPPONENT' | null>(null);
 
   // Process status effects at the start of each turn (sleep, paralysis, poison)
@@ -173,8 +179,22 @@ export function BattleUI() {
         if (isPlayerTurn) {
           const p = state.party[state.battle.playerActiveIndex];
           if (p && p.hp <= 0) {
-            actions.addBattleLog(`${p.name} fainted! You blacked out!`);
-            setTimeout(() => actions.endBattle(), 2000);
+            actions.addBattleLog(`${p.name} fainted!`);
+            // Check if all party members have fainted
+            const freshState = useGameStore.getState();
+            const allFainted = freshState.party.every(m => m.hp <= 0);
+            if (allFainted) {
+              setTimeout(() => {
+                actions.addBattleLog(`All Pokémon fainted! You blacked out!`);
+                setTimeout(() => actions.endBattle(), 2000);
+              }, 800);
+            } else {
+              setTimeout(() => {
+                actions.setBattleMenuState('SWITCH');
+                actions.setTurn('PLAYER');
+                setCursorIdx(0);
+              }, 600);
+            }
           }
         } else {
           if (state.battle.opponent && state.battle.opponent.hp <= 0) {
@@ -294,10 +314,24 @@ export function BattleUI() {
                         
                         if (p.hp <= 0) {
                             setTimeout(() => {
-                              actions.addBattleLog(`${p.name} fainted! You blacked out!`);
-                              setTimeout(() => {
-                                  actions.endBattle();
-                              }, 2000);
+                              actions.addBattleLog(`${p.name} fainted!`);
+                              // Check if all party members have fainted
+                              const freshState = useGameStore.getState();
+                              const allFainted = freshState.party.every(m => m.hp <= 0);
+                              if (allFainted) {
+                                // Let the faint log display first, then blackout
+                                setTimeout(() => {
+                                  actions.addBattleLog(`All Pokémon fainted! You blacked out!`);
+                                  setTimeout(() => actions.endBattle(), 2000);
+                                }, 800);
+                              } else {
+                                // Auto-open SWITCH menu so player can send out a replacement
+                                setTimeout(() => {
+                                  actions.setBattleMenuState('SWITCH');
+                                  actions.setTurn('PLAYER');
+                                  setCursorIdx(0);
+                                }, 600);
+                              }
                             }, 500);
                         } else {
                             actions.setTurn('PLAYER');
@@ -331,8 +365,12 @@ export function BattleUI() {
             actions.setBattleMenuState('ITEM'); 
             setCursorIdx(0);
           } else if (actualIdx === 3) { // RUN
-             actions.addBattleLog("Got away safely!");
-             setTimeout(() => { actions.endBattle(); }, 1500);
+             if (isTrainerBattle) {
+               actions.addBattleLog("You can't run from a trainer battle!");
+             } else {
+               actions.addBattleLog("Got away safely!");
+               setTimeout(() => { actions.endBattle(); }, 1500);
+             }
           }
       } else if (menuState === 'SWITCH') {
           if (actualIdx < party.length && actualIdx !== battle.playerActiveIndex) {
@@ -363,7 +401,9 @@ export function BattleUI() {
                  actions.addBattleLog("You don't have any POTIONs left!");
              }
           } else if (actualIdx === 1) { // POKéBALL
-             if (pokeballs > 0) {
+             if (isTrainerBattle) {
+               actions.addBattleLog("You can't catch another Trainer's Pokémon!");
+             } else if (pokeballs > 0) {
                  // Trigger full pokeball throw sequence in core store
                  actions.usePokeball();
                  
@@ -518,7 +558,7 @@ export function BattleUI() {
                 <Sparkles className="text-slate-950" size={28} />
                </motion.div>
               <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 tracking-wider">VICTORY</h2>
-              <p className="text-slate-400 text-[10px]">WILD POKÉMON DEFEATED</p>
+              <p className="text-slate-400 text-[10px]">{isTrainerBattle ? `${trainerName || 'TRAINER'} DEFEATED` : 'WILD POKÉMON DEFEATED'}</p>
             </div>
 
             {/* Reward Summary */}
@@ -608,7 +648,12 @@ export function BattleUI() {
                  <div className="flex-1">
                      <div className="flex items-center justify-between">
                          <div className="flex items-center gap-1.5">
+                           <div className="flex flex-col items-start">
+                           {isTrainerBattle && (
+                             <div className="font-extrabold uppercase text-[10px] tracking-widest text-pink-400">{trainerName}</div>
+                           )}
                            <div className="font-extrabold uppercase text-transparent bg-clip-text bg-gradient-to-r from-[#ffd8a8] to-slate-100 text-lg sm:text-xl tracking-tight">{opponent.name}</div>
+                         </div>
                            {battle.opponentStatus !== 'NONE' && (
                              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider ${getStatusBadgeStyle(battle.opponentStatus)}`}>
                                {battle.opponentStatus === 'POISON' ? 'PSN' : battle.opponentStatus === 'PARALYSIS' ? 'PAR' : battle.opponentStatus === 'SLEEP' ? 'SLP' : battle.opponentStatus === 'CONFUSION' ? 'CNF' : battle.opponentStatus === 'BURN' ? 'BRN' : battle.opponentStatus === 'FREEZE' ? 'FRZ' : battle.opponentStatus}
@@ -891,8 +936,15 @@ export function BattleUI() {
                              </button>
                            );
                          }),
-                         <button key="BACK_SWITCH" className="flex items-center gap-2 cursor-pointer col-span-2 text-slate-400 hover:text-white mt-1 justify-center py-1 text-sm font-bold bg-slate-900/60 rounded-lg hover:bg-slate-900 border border-slate-800 font-mono" onClick={() => { actions.setBattleMenuState('MAIN'); setCursorIdx(0); }}>
-                             <span>[ RETURN TO BATTLE OPTIONS ]</span>
+                         <button key="BACK_SWITCH" className={`flex items-center gap-2 ${activePokemon && activePokemon.hp <= 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white cursor-pointer'} col-span-2 mt-1 justify-center py-1 text-sm font-bold bg-slate-900/60 rounded-lg border border-slate-800 font-mono`} onClick={() => {
+                           if (activePokemon && activePokemon.hp <= 0) {
+                             actions.addBattleLog(`${activePokemon.name} can't battle! Choose a replacement!`);
+                           } else {
+                             actions.setBattleMenuState('MAIN');
+                             setCursorIdx(0);
+                           }
+                         }}>
+                             <span>{activePokemon && activePokemon.hp <= 0 ? '[ SELECT A REPLACEMENT ]' : '[ RETURN TO BATTLE OPTIONS ]'}</span>
                          </button>
                      ]}
 
