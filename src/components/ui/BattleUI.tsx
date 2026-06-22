@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useGameStore, Move } from '../../store/gameStore';
 import { ChevronRight, ShieldAlert, Zap, Swords, Sparkles, Heart } from 'lucide-react';
 import { Canvas } from '@react-three/fiber';
@@ -111,6 +111,85 @@ export function BattleUI() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [mode, turn, log, menuState, cursorIdx, activePokemon]);
+
+  // Track which turn's status effects have been processed
+  const lastProcessedTurn = useRef<'PLAYER' | 'OPPONENT' | null>(null);
+
+  // Process status effects at the start of each turn (sleep, paralysis, poison)
+  useEffect(() => {
+    if (mode !== 'BATTLE' || !opponent || !activePokemon || turn === 'END') return;
+    if (log.length > 0) return; // wait until logs are dismissed
+    if (lastProcessedTurn.current === turn) return; // already processed this turn
+    lastProcessedTurn.current = turn;
+
+    const isPlayerTurn = turn === 'PLAYER';
+    const status = isPlayerTurn ? battle.playerStatus : battle.opponentStatus;
+    const battler = isPlayerTurn ? activePokemon : opponent;
+    if (!battler || status === 'NONE') return;
+
+    // --- SLEEP CHECK ---
+    if (status === 'SLEEP') {
+      const currentSleepTurns = battle.sleepTurns;
+      if (currentSleepTurns > 0) {
+        const newSleepTurns = currentSleepTurns - 1;
+        actions.setSleepTurns(newSleepTurns);
+
+        if (newSleepTurns > 0) {
+          actions.addBattleLog(`${battler.name} is fast asleep...`);
+          setTimeout(() => {
+            actions.setTurn(isPlayerTurn ? 'OPPONENT' : 'PLAYER');
+          }, 700);
+          return; // skip this turn
+        } else {
+          // Wake up!
+          actions.applyStatusEffect(isPlayerTurn ? 'PLAYER' : 'OPPONENT', 'NONE');
+          actions.addBattleLog(`${battler.name} woke up!`);
+          // Fall through — battler can act this turn
+        }
+      }
+    }
+
+    // --- PARALYSIS CHECK (25% chance to skip turn) ---
+    if (status === 'PARALYSIS' && Math.random() < 0.25) {
+      actions.addBattleLog(`${battler.name} is paralyzed! It can't move!`);
+      setTimeout(() => {
+        actions.setTurn(isPlayerTurn ? 'OPPONENT' : 'PLAYER');
+      }, 700);
+      return;
+    }
+
+    // --- POISON CHECK (1/8 max HP damage at start of turn, then skip turn) ---
+    if (status === 'POISON') {
+      const poisonDamage = Math.max(1, Math.floor(battler.maxHp / 8));
+      actions.applyDamage(isPlayerTurn ? 'PLAYER' : 'OPPONENT', poisonDamage);
+
+      const name = isPlayerTurn ? battler.name : opponent.name;
+      actions.addBattleLog(`${name} is hurt by poison! (-${poisonDamage} HP)`);
+
+      // Check if the battler fainted from poison
+      setTimeout(() => {
+        const state = useGameStore.getState();
+        if (isPlayerTurn) {
+          const p = state.party[state.battle.playerActiveIndex];
+          if (p && p.hp <= 0) {
+            actions.addBattleLog(`${p.name} fainted! You blacked out!`);
+            setTimeout(() => actions.endBattle(), 2000);
+          }
+        } else {
+          if (state.battle.opponent && state.battle.opponent.hp <= 0) {
+            actions.addBattleLog(`Wild ${opponent.name} fainted!`);
+            setTimeout(() => actions.gainVictory(), 400);
+          }
+        }
+      }, 300);
+
+      // Skip the battler's turn after poison damage (avoids AI log conflict)
+      setTimeout(() => {
+        actions.setTurn(isPlayerTurn ? 'OPPONENT' : 'PLAYER');
+      }, 700);
+      return;
+    }
+  }, [mode, turn, battle.playerStatus, battle.opponentStatus, battle.sleepTurns, log.length, opponent, activePokemon]);
 
   // OPPONENT turn logic — now with STATUS move support
   useEffect(() => {

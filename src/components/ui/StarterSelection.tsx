@@ -80,6 +80,7 @@ export function StarterSelection() {
   const [screenFlash, setScreenFlash] = useState(false);
   const [burstParticles, setBurstParticles] = useState<{ id: number; x: number; y: number; color: string; emoji: string }[]>([]);
   const [confetti, setConfetti] = useState<{ id: number; x: number; y: number; color: string; size: number; shape: 'circle' | 'square'; delay: number; duration: number; rotation: number }[]>([]);
+  const [cascadeConfetti, setCascadeConfetti] = useState<{ id: number; x: number; color: string; size: number; shape: 'circle' | 'square'; delay: number; duration: number; rotation: number; drift: number }[]>([]);
   const [shaking, setShaking] = useState(false);
 
   const handleConfirm = () => {
@@ -128,7 +129,27 @@ export function StarterSelection() {
           setBurstParticles([]);
           setConfetti([]);
         }, 1200);
-      }
+
+        // Secondary cascade wave — particles fall from top after 300ms delay
+        const cascadeTimer = setTimeout(() => {
+          const newCascade = Array.from({ length: 30 }, (_, i) => ({
+            id: Date.now() + 200 + i,
+            x: Math.random() * 100, // random horizontal start position (vw)
+            color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+            size: Math.random() * 6 + 3,
+            shape: (Math.random() > 0.5 ? 'circle' : 'square') as 'circle' | 'square',
+            delay: Math.random() * 0.4, // stagger start times
+            duration: Math.random() * 1.0 + 1.2, // 1.2–2.2s to fall
+            rotation: Math.random() * 720,
+            drift: (Math.random() - 0.5) * 200, // horizontal drift in px
+          }));
+          setCascadeConfetti(newCascade);
+
+          // Clear cascade after its animation completes
+          setTimeout(() => {
+            setCascadeConfetti([]);
+          }, 2800);
+        }, 300);      }
 
       // Brief delay for dramatic effect
       setTimeout(() => {
@@ -138,6 +159,7 @@ export function StarterSelection() {
         setScreenFlash(false);
         setBurstParticles([]);
         setConfetti([]);
+        setCascadeConfetti([]);
       }, 800);
     }
   };
@@ -236,6 +258,40 @@ export function StarterSelection() {
                 duration: c.duration,
                 delay: c.delay,
                 ease: [0.25, 0.46, 0.45, 0.94], // cubic bezier for bounce/fade
+              }}
+              style={{
+                width: c.size,
+                height: c.size,
+                borderRadius: c.shape === 'circle' ? '50%' : '2px',
+                backgroundColor: c.color,
+                boxShadow: `0 0 6px ${c.color}88`,
+              }}
+            />
+          ))}
+
+          {/* Secondary cascade confetti wave — falls from top after initial burst */}
+          {cascadeConfetti.map((c) => (
+            <motion.div
+              key={c.id}
+              className="absolute z-50 pointer-events-none"
+              initial={{
+                x: `${c.x}vw`,
+                y: '-5vh',
+                scale: 0.3,
+                rotate: 0,
+                opacity: 1,
+              }}
+              animate={{
+                y: '105vh',
+                x: `calc(${c.x}vw + ${c.drift}px)`,
+                scale: [0.3, 1, 0.8, 0.4],
+                opacity: [1, 1, 0.6, 0],
+                rotate: [0, c.rotation * 0.5, c.rotation],
+              }}
+              transition={{
+                duration: c.duration,
+                delay: c.delay,
+                ease: [0.25, 0.1, 0.45, 0.95], // gentle ease for falling
               }}
               style={{
                 width: c.size,

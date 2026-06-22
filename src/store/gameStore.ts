@@ -287,6 +287,7 @@ interface GameState {
     applyStatusEffect: (target: 'PLAYER' | 'OPPONENT', effect: StatusEffect) => void;
     applyStatMod: (target: 'PLAYER' | 'OPPONENT', mod: StatMod, stages: number) => void;
     resetStatStages: (target: 'PLAYER' | 'OPPONENT') => void;
+    setSleepTurns: (turns: number) => void;
     gainVictory: () => void;
     resetGame: () => void;
 
@@ -554,12 +555,22 @@ export const useGameStore = create<GameState>()(
         }),
 
         applyStatusEffect: (target, effect) => set((state) => {
+          const battleUpdates: Partial<BattleState> = {};
           if (target === 'PLAYER') {
-            return { battle: { ...state.battle, playerStatus: effect } };
+            battleUpdates.playerStatus = effect;
           } else {
-            return { battle: { ...state.battle, opponentStatus: effect } };
+            battleUpdates.opponentStatus = effect;
           }
+          // Set sleep turns when SLEEP is applied (1-3 turns)
+          if (effect === 'SLEEP') {
+            battleUpdates.sleepTurns = Math.floor(Math.random() * 3) + 1;
+          }
+          return { battle: { ...state.battle, ...battleUpdates } };
         }),
+
+        setSleepTurns: (turns) => set((state) => ({
+          battle: { ...state.battle, sleepTurns: Math.max(0, turns) }
+        })),
 
         applyStatMod: (target, mod, stages) => set((state) => {
           const clamp = (v: number) => Math.max(-6, Math.min(6, v));

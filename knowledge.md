@@ -8,7 +8,10 @@ A 3D Pokémon Red prototype built with React Three Fiber, Zustand state manageme
 
 - **Setup:** `npm install`
 - **Dev:** `npm run dev`
+- **Build:** `npm run build`
+- **Deploy:** `npm run deploy` (pushes dist/ to gh-pages branch)
 - **Typecheck:** `npx tsc --noEmit`
+- **Play:** https://fahadibrahim93.github.io/Pok-mon-Red-3D/
 
 ---
 
