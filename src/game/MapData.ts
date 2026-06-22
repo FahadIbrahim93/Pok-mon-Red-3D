@@ -45,6 +45,7 @@ export const interactionMap: Record<string, string> = {
   "4,6": "PIKACHU: 'Pika-chuuuu! *Its cheeks spark with cute static electricity.*'",
   "2,6": "BULBASAUR: 'Bulba-saur! *It points its beautiful green plant seed toward the skies.*'",
   "12,6": "CHARMANDER: 'Char-char! *The lively flame on the tip of its tail dances in the breeze.*'",
+  "8,7": "OAK'S STARTER TABLE: Three pristine red-and-white Poké Balls are placed neatly under the acrylic casing! Inside, the spirits of Bulbasaur, Charmander, and Squirtle wait patiently for their lifelong partners.",
 
   // New highly immersive scenery interactions
   "2,4": "RED'S MAILBOX: A postcard from your Mom in Cinnabar Island: 'Take care of your partners! Remember to change shoes when riding your bike!'",
@@ -70,6 +71,7 @@ export const checkCollision = (x: number, z: number): boolean => {
   if (x === 12 && z === 6) return true;
 
   // New Scenery colliders for physical immersion
+  if (x === 8 && z === 7) return true; // Oak's Starter Poké Ball table
   if (x === 1 && z === 1) return true; // Secret chest box
   if (x === 2 && z === 4) return true; // Red's mailbox
   if (x === 9 && z === 4) return true; // Gary's mailbox

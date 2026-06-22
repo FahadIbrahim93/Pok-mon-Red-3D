@@ -1,10 +1,11 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Group, Mesh } from 'three';
 import * as THREE from 'three';
 import { mapGrid, MAP_HEIGHT, MAP_WIDTH, TileType } from '../../game/MapData';
 import { TrainerModel } from './TrainerModel';
 import { PokemonModel } from './PokemonModel';
+import { useGameStore } from '../../store/gameStore';
 
 interface ClimateState {
   skyColor: string;
@@ -79,12 +80,107 @@ export function World() {
   const waterGroupRef = useRef<Group>(null);
   const grassGroupRef = useRef<Group>(null);
   
+  // Game state subscriptions for dynamic Kanto interactions
+  const position = useGameStore((state) => state.position);
+  const targetPosition = useGameStore((state) => state.targetPosition);
+  const isMoving = useGameStore((state) => state.isMoving);
+  const bicycleActive = useGameStore((state) => state.bicycleActive);
+
+  // Local state desynchronization for NPC overworld pacing pathways
+  const [oakHeading, setOakHeading] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT'>('DOWN');
+  const [oakPacingState, setOakPacingState] = useState<'IDLE' | 'WALK'>('IDLE');
+  const [rivalHeading, setRivalHeading] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT'>('LEFT');
+  const [rivalPacingState, setRivalPacingState] = useState<'IDLE' | 'WALK'>('IDLE');
+
+  // Multi-tier 3D particle registers to simulate high-fidelity rustling in grass patches
+  const playerPosLocal = useRef<THREE.Vector3>(new THREE.Vector3(5, 0, 4));
+  const particlesRef = useRef<{
+    x: number;
+    y: number;
+    z: number;
+    vx: number;
+    vy: number;
+    vz: number;
+    age: number;
+    maxAge: number;
+    color: string;
+    scale: number;
+    rotation: number;
+    rotSpeed: number;
+  }[]>([]);
+  const leafParticlesGroupRef = useRef<Group>(null);
+  const particlePoolSize = 24;
+
   // Day/Night atmosphere references
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const ambientLightRef = useRef<THREE.AmbientLight>(null);
   const starsGroupRef = useRef<Group>(null);
   const petalsGroupRef = useRef<Group>(null);
   const firefliesGroupRef = useRef<Group>(null);
+
+  // Mascot dynamic references
+  const pikachuGroupRef = useRef<Group>(null);
+  const bulbasaurGroupRef = useRef<Group>(null);
+  const charmanderGroupRef = useRef<Group>(null);
+  const oakGroupRef = useRef<Group>(null);
+  const rivalGroupRef = useRef<Group>(null);
+
+  // High fidelity wind / satellite / streetlight references
+  const rivalTurbineRef = useRef<Group>(null);
+  const labSatelliteRef = useRef<Group>(null);
+  const cloudsGroupRef = useRef<Group>(null);
+  const streetlampLightRefs = useRef<(THREE.PointLight | null)[]>([]);
+  const streetlampMaterialRefs = useRef<(any | null)[]>([]);
+
+  // Memoized streetlamp structural locations
+  const streetlamps = useMemo(() => {
+    return [
+      { x: 4.8, z: 4.8 },
+      { x: 9.2, z: 4.8 },
+      { x: 4.8, z: 11.2 },
+      { x: 9.2, z: 11.2 },
+    ];
+  }, []);
+
+  // Soft low-poly clouds drifting slowly across the sky
+  const clouds = useMemo(() => {
+    return [
+      { y: 7.2, x: -3, z: 2.5, scale: 1.1, speed: 0.14 },
+      { y: 8.8, x: 7, z: 4.5, scale: 0.85, speed: 0.09 },
+      { y: 7.6, x: 2, z: 12.0, scale: 1.3, speed: 0.16 },
+      { y: 9.2, x: 14, z: 8.5, scale: 0.95, speed: 0.11 },
+    ];
+  }, []);
+
+  // Dynamic Route 1 high-fidelity tall grass patches (at the top rows)
+  const route1GrassPatches = useMemo(() => {
+    const patches: { x: number; z: number; phase: number; scale: number }[] = [];
+    // original Route 1 grass patches on north side of Town
+    const coords = [
+      { x: 2, z: 1 }, { x: 3, z: 1 }, { x: 4, z: 1 }, { x: 5, z: 1 },
+      { x: 9, z: 1 }, { x: 10, z: 1 }, { x: 11, z: 1 }, { x: 12, z: 1 },
+      { x: 3, z: 0 }, { x: 4, z: 0 }, { x: 10, z: 0 }, { x: 11, z: 0 }
+    ];
+    coords.forEach((coord) => {
+      patches.push({
+        x: coord.x,
+        z: coord.z,
+        phase: Math.random() * Math.PI,
+        scale: 0.85 + Math.random() * 0.3
+      });
+    });
+    return patches;
+  }, []);
+
+  // Decorative Sakura Cherry Blossom trees coordinates
+  const sakuraTrees = useMemo(() => {
+    return [
+      { x: 1.2, z: 4.5 },
+      { x: 13.8, z: 4.5 },
+      { x: 1.2, z: 10.5 },
+      { x: 13.8, z: 10.5 },
+    ];
+  }, []);
 
   // Generate dynamic, randomized decorative grass tufts across grass tiles (type 0)
   const grassTufts = useMemo(() => {
@@ -318,6 +414,212 @@ export function World() {
         }
       });
     }
+
+    // 9. Mascot Pokémon cute active roaming paths
+    if (pikachuGroupRef.current) {
+      const pikaAngle = time * 0.7;
+      pikachuGroupRef.current.position.x = 4.0 + Math.cos(pikaAngle) * 0.8;
+      pikachuGroupRef.current.position.z = 6.0 + Math.sin(pikaAngle) * 0.8;
+      pikachuGroupRef.current.rotation.y = -pikaAngle - Math.PI / 2;
+    }
+
+    if (bulbasaurGroupRef.current) {
+      const bulbXDir = Math.sin(time * 0.35);
+      const bulbX = 2.0 + bulbXDir * 0.6;
+      bulbasaurGroupRef.current.position.x = bulbX;
+      bulbasaurGroupRef.current.position.z = 6.0;
+      const speedX = Math.cos(time * 0.35);
+      bulbasaurGroupRef.current.rotation.y = speedX > 0 ? Math.PI / 2 : -Math.PI / 2;
+    }
+
+    if (charmanderGroupRef.current) {
+      const charAngle = time * 0.78;
+      charmanderGroupRef.current.position.x = 12.0 + Math.sin(charAngle) * 0.65;
+      charmanderGroupRef.current.position.z = 6.0 + Math.cos(charAngle) * 0.65;
+      charmanderGroupRef.current.rotation.y = -charAngle + Math.PI;
+    }
+
+    // 10. NPC interactive desynchronized pacing pathways & heading updates
+    // Professor Oak pacing inside his tile (7,7)
+    const oakCycle = Math.floor(time) % 12;
+    let nextOakHeading: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' = 'DOWN';
+    let nextOakState: 'IDLE' | 'WALK' = 'IDLE';
+    let nextOakX = 7;
+
+    if (oakCycle < 3) {
+      const t = (time % 12) / 3;
+      nextOakX = 7.0 - 0.45 * t;
+      nextOakHeading = 'LEFT';
+      nextOakState = 'WALK';
+    } else if (oakCycle < 6) {
+      nextOakX = 6.55;
+      nextOakHeading = 'DOWN';
+      nextOakState = 'IDLE';
+    } else if (oakCycle < 9) {
+      const t = ((time % 12) - 6) / 3;
+      nextOakX = 6.55 + 0.9 * t;
+      nextOakHeading = 'RIGHT';
+      nextOakState = 'WALK';
+    } else {
+      const t = ((time % 12) - 9) / 3;
+      nextOakX = 7.45 - 0.45 * t;
+      nextOakHeading = 'LEFT';
+      nextOakState = 'WALK';
+    }
+
+    if (oakGroupRef.current) {
+      oakGroupRef.current.position.x = nextOakX;
+    }
+    if (oakHeading !== nextOakHeading) setOakHeading(nextOakHeading);
+    if (oakPacingState !== nextOakState) setOakPacingState(nextOakState);
+
+    // Rival Gary pacing inside his tile (10,5) desynchronized by 3.5s phase shift
+    const garyCycle = Math.floor(time + 3.5) % 10;
+    let nextGaryHeading: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' = 'LEFT';
+    let nextGaryState: 'IDLE' | 'WALK' = 'IDLE';
+    let nextGaryZ = 5;
+
+    if (garyCycle < 2.5) {
+      const t = ((time + 3.5) % 10) / 2.5;
+      nextGaryZ = 5.0 - 0.4 * t;
+      nextGaryHeading = 'UP';
+      nextGaryState = 'WALK';
+    } else if (garyCycle < 5) {
+      nextGaryZ = 4.6;
+      nextGaryHeading = 'LEFT';
+      nextGaryState = 'IDLE';
+    } else if (garyCycle < 7.5) {
+      const t = (((time + 3.5) % 10) - 5) / 2.5;
+      nextGaryZ = 4.6 + 0.8 * t;
+      nextGaryHeading = 'DOWN';
+      nextGaryState = 'WALK';
+    } else {
+      const t = (((time + 3.5) % 10) - 7.5) / 2.5;
+      nextGaryZ = 5.4 - 0.4 * t;
+      nextGaryHeading = 'UP';
+      nextGaryState = 'WALK';
+    }
+
+    if (rivalGroupRef.current) {
+      rivalGroupRef.current.position.z = nextGaryZ;
+    }
+    if (rivalHeading !== nextGaryHeading) setRivalHeading(nextGaryHeading);
+    if (rivalPacingState !== nextGaryState) setRivalPacingState(nextGaryState);
+
+    // 11. High-fidelity dynamic Player 3D sync and 3D grass patch walk rustle particles
+    const targetVec = new THREE.Vector3(targetPosition[0], 0, targetPosition[1]);
+    const moveSpeedValue = bicycleActive ? 8.5 : 5.0;
+    playerPosLocal.current.lerp(targetVec, dt * moveSpeedValue * 1.5);
+
+    const px = Math.round(playerPosLocal.current.x);
+    const pz = Math.round(playerPosLocal.current.z);
+    
+    // Check if player is on a grass tile
+    let isOnGrassTile = false;
+    if (pz >= 0 && pz < MAP_HEIGHT && px >= 0 && px < MAP_WIDTH) {
+      isOnGrassTile = mapGrid[pz][px] === TileType.GRASS;
+    }
+    if (!isOnGrassTile) {
+      isOnGrassTile = route1GrassPatches.some((p) => Math.round(p.x) === px && Math.round(p.z) === pz);
+    }
+
+    if (isOnGrassTile && isMoving && Math.random() < 0.35) {
+      particlesRef.current.push({
+        x: playerPosLocal.current.x + (Math.random() - 0.5) * 0.4,
+        y: 0.15 + Math.random() * 0.1,
+        z: playerPosLocal.current.z + (Math.random() - 0.5) * 0.4,
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: 1.5 + Math.random() * 2.0, // Shoot upwards quickly!
+        vz: (Math.random() - 0.5) * 1.2,
+        age: 0,
+        maxAge: 0.6 + Math.random() * 0.4,
+        color: ['#40c057', '#37b24d', '#2b8a3e', '#51cf66', '#a9e34b'][Math.floor(Math.random() * 5)],
+        scale: 0.08 + Math.random() * 0.08,
+        rotation: Math.random() * Math.PI,
+        rotSpeed: (Math.random() - 0.5) * 10,
+      });
+    }
+
+    // Update grass particles physical motion frame-by-frame
+    particlesRef.current = particlesRef.current.filter((p) => {
+      p.age += dt;
+      if (p.age >= p.maxAge) return false;
+
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+
+      p.vy -= 4.2 * dt; // gravity deceleration
+      p.vx += Math.sin(time * 5.0 + p.y) * 0.22 * dt; // wind sway
+      p.rotation += p.rotSpeed * dt;
+
+      return true;
+    });
+
+    // Update static particle pool geometry transformations directly for high performance
+    if (leafParticlesGroupRef.current) {
+      const children = leafParticlesGroupRef.current.children;
+      for (let i = 0; i < particlePoolSize; i++) {
+        const mesh = children[i] as THREE.Mesh;
+        const particle = particlesRef.current[i];
+        if (mesh) {
+          if (particle) {
+            mesh.position.set(particle.x, particle.y, particle.z);
+            mesh.rotation.set(particle.rotation, particle.rotation * 0.5, 0);
+            
+            const lifeRatio = 1.0 - (particle.age / particle.maxAge);
+            const currentScale = particle.scale * lifeRatio;
+            mesh.scale.set(currentScale, currentScale, currentScale);
+            
+            const mat = mesh.material as THREE.MeshStandardMaterial;
+            if (mat) {
+              mat.color.set(particle.color);
+              mat.transparent = true;
+              mat.opacity = lifeRatio;
+            }
+            mesh.visible = true;
+          } else {
+            mesh.visible = false;
+          }
+        }
+      }
+    }
+
+    // 11. Spinning energy wind-turbine on Rival Gary's roof
+    if (rivalTurbineRef.current) {
+      rivalTurbineRef.current.rotation.z += dt * 3.8;
+    }
+
+    // 12. Scanning research satellite radar on Oak's Laboratory roof
+    if (labSatelliteRef.current) {
+      labSatelliteRef.current.rotation.y = Math.sin(time * 0.45) * 0.6;
+    }
+
+    // 13. Streetlamp light intensity & material luminance synchronization
+    streetlampLightRefs.current.forEach((light) => {
+      if (light) {
+        light.intensity = climate.nightFactor * 2.6;
+      }
+    });
+    streetlampMaterialRefs.current.forEach((mat) => {
+      if (mat) {
+        mat.emissiveIntensity = climate.nightFactor * 2.2;
+      }
+    });
+
+    // 14. Puffy clouds drifting across Kanto skies
+    if (cloudsGroupRef.current) {
+      const childClouds = cloudsGroupRef.current.children;
+      clouds.forEach((cloud, idx) => {
+        const item = childClouds[idx];
+        if (item) {
+          item.position.x += cloud.speed * dt;
+          if (item.position.x > MAP_WIDTH + 6) {
+            item.position.x = -6;
+          }
+        }
+      });
+    }
   });
 
   return (
@@ -367,6 +669,77 @@ export function World() {
           </mesh>
         ))}
       </group>
+
+      {/* DRIFTING PUFFY LOW-POLY CLOUDS */}
+      <group ref={cloudsGroupRef}>
+        {clouds.map((cloud, i) => (
+          <group key={`cloud-${i}`} position={[cloud.x, cloud.y, cloud.z]} scale={[cloud.scale, cloud.scale, cloud.scale]}>
+            <mesh castShadow>
+              <sphereGeometry args={[0.8, 7, 7]} />
+              <meshStandardMaterial color="#ffffff" roughness={0.9} flatShading opacity={0.88} transparent />
+            </mesh>
+            <mesh position={[0.5, -0.2, 0.2]} castShadow>
+              <sphereGeometry args={[0.55, 6, 6]} />
+              <meshStandardMaterial color="#f1f3f5" roughness={0.9} flatShading opacity={0.88} transparent />
+            </mesh>
+            <mesh position={[-0.5, -0.2, -0.2]} castShadow>
+              <sphereGeometry args={[0.55, 6, 6]} />
+              <meshStandardMaterial color="#f1f3f5" roughness={0.9} flatShading opacity={0.88} transparent />
+            </mesh>
+          </group>
+        ))}
+      </group>
+
+      {/* DYNAMIC ATMOSPHERIC STREETLIGHTS */}
+      {streetlamps.map((lamp, i) => (
+        <group key={`streetlamp-${i}`} position={[lamp.x, 0, lamp.z]}>
+          {/* Base and metallic black Post */}
+          <mesh position={[0, 0.1, 0]} castShadow>
+            <cylinderGeometry args={[0.1, 0.12, 0.2, 6]} />
+            <meshStandardMaterial color="#212529" roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 1.2, 0]} castShadow>
+            <cylinderGeometry args={[0.04, 0.04, 2.2, 8]} />
+            <meshStandardMaterial color="#343a40" metalness={0.8} roughness={0.3} />
+          </mesh>
+          {/* Ornate hanger bracket */}
+          <mesh position={[0.18, 2.1, 0]} castShadow>
+            <boxGeometry args={[0.4, 0.05, 0.05]} />
+            <meshStandardMaterial color="#212529" roughness={0.5} />
+          </mesh>
+          {/* Glowing Lantern head with pointlight attached */}
+          <group position={[0.34, 1.95, 0]}>
+            <mesh castShadow>
+              <boxGeometry args={[0.22, 0.32, 0.22]} />
+              <meshStandardMaterial color="#212529" roughness={0.5} />
+            </mesh>
+            <mesh 
+              position={[0, -0.06, 0]} 
+              ref={(el) => {
+                if (el) {
+                  streetlampMaterialRefs.current[i] = el.material as any;
+                }
+              }}
+            >
+              <cylinderGeometry args={[0.08, 0.06, 0.14, 5]} />
+              <meshStandardMaterial color="#5c5f66" emissive="#ffd8a8" emissiveIntensity={0.0} toneMapped={false} />
+            </mesh>
+            
+            {/* Real 3D PointLight casting soft shadows at night */}
+            <pointLight
+              ref={(el) => {
+                streetlampLightRefs.current[i] = el;
+              }}
+              color="#ffd8a8"
+              intensity={0.0}
+              distance={7.5}
+              decay={2}
+              castShadow
+              shadow-bias={-0.002}
+            />
+          </group>
+        </group>
+      ))}
 
       {/* Initial background attaches */}
       <color attach="background" args={['#a5d8ff']} />
@@ -427,6 +800,61 @@ export function World() {
           </group>
         ))}
       </group>
+
+      {/* HIGH-FIDELITY ROUTE 1 BATTLE TALL GRASS CLUSTERS */}
+      {route1GrassPatches.map((patch, i) => (
+        <group key={`route1-grass-${i}`} position={[patch.x, 0.05, patch.z]} scale={[patch.scale, patch.scale, patch.scale]}>
+          <mesh position={[-0.15, 0.25, -0.15]} castShadow>
+            <boxGeometry args={[0.08, 0.5, 0.08]} />
+            <meshStandardMaterial color="#37b24d" roughness={0.9} />
+          </mesh>
+          <mesh position={[0.15, 0.25, 0.15]} castShadow>
+            <boxGeometry args={[0.08, 0.55, 0.08]} />
+            <meshStandardMaterial color="#2b8a3e" roughness={0.9} />
+          </mesh>
+          <mesh position={[-0.15, 0.22, 0.15]} castShadow>
+            <boxGeometry args={[0.08, 0.45, 0.08]} />
+            <meshStandardMaterial color="#40c057" roughness={0.9} />
+          </mesh>
+          <mesh position={[0.15, 0.28, -0.15]} castShadow>
+            <boxGeometry args={[0.08, 0.58, 0.08]} />
+            <meshStandardMaterial color="#37b24d" roughness={0.9} />
+          </mesh>
+          {/* Central thick leaf bunch */}
+          <mesh position={[0, 0.35, 0]} castShadow>
+            <boxGeometry args={[0.18, 0.7, 0.18]} />
+            <meshStandardMaterial color="#51cf66" roughness={1.0} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* LUXURIOUS SAKURA CHERRY BLOSSOM TREES */}
+      {sakuraTrees.map((tree, i) => (
+        <group key={`sakura-tree-${i}`} position={[tree.x, 0, tree.z]}>
+          {/* Trunk */}
+          <mesh position={[0, 0.45, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.12, 0.18, 0.9, 8]} />
+            <meshStandardMaterial color="#6a4c33" roughness={0.9} />
+          </mesh>
+          {/* Fluffy Blossom Layers */}
+          <mesh position={[0, 1.25, 0]} castShadow>
+            <sphereGeometry args={[0.55, 7, 7]} />
+            <meshStandardMaterial color="#ff92b1" roughness={0.8} flatShading />
+          </mesh>
+          <mesh position={[0.25, 1.6, -0.15]} castShadow>
+            <sphereGeometry args={[0.42, 6, 6]} />
+            <meshStandardMaterial color="#ffb3c6" roughness={0.8} flatShading />
+          </mesh>
+          <mesh position={[-0.25, 1.5, 0.25]} castShadow>
+            <sphereGeometry args={[0.42, 6, 6]} />
+            <meshStandardMaterial color="#faadb1" roughness={0.8} flatShading />
+          </mesh>
+          <mesh position={[0, 1.85, 0]} castShadow>
+            <sphereGeometry args={[0.34, 5, 5]} />
+            <meshStandardMaterial color="#ffccd5" roughness={0.8} flatShading />
+          </mesh>
+        </group>
+      ))}
 
       {/* Solid structures, stylized house modeling */}
       {solids.map(([x, z], i) => {
@@ -535,6 +963,43 @@ export function World() {
                   <meshStandardMaterial color="#1a1b1e" />
                 </mesh>
               </group>
+
+              {/* Dynamic sustainable wind turbine on Gary's roof */}
+              <group position={[1.3, 2.5, -0.6]}>
+                {/* Wind turbine tall post */}
+                <mesh castShadow>
+                  <cylinderGeometry args={[0.03, 0.05, 1.2]} />
+                  <meshStandardMaterial color="#ced4da" metalness={0.7} roughness={0.3} />
+                </mesh>
+                {/* Nacelle housing */}
+                <mesh position={[0, 0.6, 0.06]} castShadow>
+                  <boxGeometry args={[0.15, 0.15, 0.25]} />
+                  <meshStandardMaterial color="#dee2e6" metalness={0.5} />
+                </mesh>
+                {/* Spinning hub and blades */}
+                <group position={[0, 0.6, 0.2]} ref={rivalTurbineRef}>
+                  {/* Rotor nose cap */}
+                  <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+                    <coneGeometry args={[0.06, 0.12, 5]} />
+                    <meshStandardMaterial color="#fab005" />
+                  </mesh>
+                  {/* Blade 1 */}
+                  <mesh position={[0, 0.4, 0]} castShadow>
+                    <boxGeometry args={[0.04, 0.72, 0.01]} />
+                    <meshStandardMaterial color="#f8f9fa" />
+                  </mesh>
+                  {/* Blade 2 (angled 120deg) */}
+                  <mesh position={[-0.34, -0.2, 0]} rotation={[0, 0, Math.PI * 2 / 3]} castShadow>
+                    <boxGeometry args={[0.04, 0.72, 0.01]} />
+                    <meshStandardMaterial color="#f8f9fa" />
+                  </mesh>
+                  {/* Blade 3 (angled 240deg) */}
+                  <mesh position={[0.34, -0.2, 0]} rotation={[0, 0, -Math.PI * 2 / 3]} castShadow>
+                    <boxGeometry args={[0.04, 0.72, 0.01]} />
+                    <meshStandardMaterial color="#f8f9fa" />
+                  </mesh>
+                </group>
+              </group>
             </group>
           );
         }
@@ -564,15 +1029,22 @@ export function World() {
                 <sphereGeometry args={[0.55, 12, 12]} />
                 <meshStandardMaterial color="#d0bfff" metalness={0.7} roughness={0.1} />
               </mesh>
-              {/* Lab satellite dish */}
-              <group position={[1.8, 3.2, 0.4]} rotation={[0.4, -0.5, 0]}>
+              {/* Lab satellite dish (dynamic rolling sweep) */}
+              <group position={[1.8, 3.2, 0.4]} ref={labSatelliteRef}>
+                {/* Mast */}
                 <mesh castShadow>
                   <cylinderGeometry args={[0.04, 0.04, 0.6]} />
                   <meshStandardMaterial color="#868e96" />
                 </mesh>
+                {/* Dish cup */}
                 <mesh position={[0, 0.3, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
                   <cylinderGeometry args={[0.35, 0.05, 0.1, 8]} />
                   <meshStandardMaterial color="#adb5bd" roughness={0.4} />
+                </mesh>
+                {/* Active scan tip indicator */}
+                <mesh position={[0, 0.5, 0.1]} castShadow>
+                  <sphereGeometry args={[0.05, 6, 6]} />
+                  <meshStandardMaterial color="#40c057" emissive="#51cf66" emissiveIntensity={1.5} />
                 </mesh>
               </group>
 
@@ -593,6 +1065,30 @@ export function World() {
                 <boxGeometry args={[1.3, 1.4, 0.04]} />
                 <meshStandardMaterial color="#1a1b1e" metalness={0.8} transparent opacity={0.65} />
               </mesh>
+
+              {/* Stack of scientific research maps/papers next to entrance */}
+              <group position={[-1.1, 0.15, 2.05]} rotation={[0, 0.3, 0]}>
+                {/* Scroll 1 */}
+                <mesh position={[0, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+                  <cylinderGeometry args={[0.06, 0.06, 0.35, 6]} />
+                  <meshStandardMaterial color="#f8f9fa" roughness={0.8} />
+                </mesh>
+                {/* Scroll 1 leather wrap tie */}
+                <mesh position={[0, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+                  <cylinderGeometry args={[0.063, 0.063, 0.04, 6]} />
+                  <meshStandardMaterial color="#862e9c" />
+                </mesh>
+                {/* Scroll 2 stacked on top */}
+                <mesh position={[0.06, 0.09, 0.04]} rotation={[0, 0, Math.PI / 2 - 0.2]} castShadow>
+                  <cylinderGeometry args={[0.05, 0.05, 0.36, 6]} />
+                  <meshStandardMaterial color="#ffd8a8" roughness={0.9} />
+                </mesh>
+                {/* Scroll 3 stacked behind */}
+                <mesh position={[-0.07, 0.05, -0.05]} rotation={[0, 0, Math.PI / 2 + 0.15]} castShadow>
+                  <cylinderGeometry args={[0.055, 0.055, 0.33, 6]} />
+                  <meshStandardMaterial color="#f8f9fa" roughness={0.8} />
+                </mesh>
+              </group>
             </group>
           );
         }
@@ -698,28 +1194,102 @@ export function World() {
 
       {/* 3D CHARACTERS & MASCOT POKÉMON ROAMING PALLET TOWN ARENA */}
       {/* Professor Oak: Near entrance of research lab (7, 7) */}
-      <group position={[7, 0, 7]}>
-        <TrainerModel role="OAK" heading="DOWN" scale={0.9} />
+      <group ref={oakGroupRef} position={[7, 0, 7]}>
+        <TrainerModel role="OAK" heading={oakHeading} state={oakPacingState} scale={0.9} />
+      </group>
+
+      {/* Professor Oak's Poké Ball Starter Selection Table (8, 7) */}
+      <group position={[8, 0, 7]}>
+        {/* Desk Base structure */}
+        <mesh position={[0, 0.32, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.78, 0.62, 0.52]} />
+          <meshStandardMaterial color="#343a40" roughness={0.4} /> {/* Dark high tech metal */}
+        </mesh>
+        <mesh position={[0, 0.64, 0]} castShadow>
+          <boxGeometry args={[0.82, 0.04, 0.56]} />
+          <meshStandardMaterial color="#dee2e6" roughness={0.3} /> {/* Light silver top rim */}
+        </mesh>
+        {/* Felt starter display panel */}
+        <mesh position={[0, 0.665, 0]}>
+          <boxGeometry args={[0.68, 0.02, 0.42]} />
+          <meshStandardMaterial color="#2b8a3e" roughness={0.9} /> {/* Classic green felt pad */}
+        </mesh>
+        
+        {/* Three high-tech circular capsule holders */}
+        {[-0.22, 0.0, 0.22].map((offsetX, bIdx) => (
+          <group key={`holder-${bIdx}`} position={[offsetX, 0.68, 0]}>
+            <mesh castShadow>
+              <cylinderGeometry args={[0.07, 0.07, 0.02, 12]} />
+              <meshStandardMaterial color="#1a1b1e" roughness={0.2} metalness={0.8} />
+            </mesh>
+            {/* Cute 3D custom Poké Ball red & white */}
+            <group position={[0, 0.08, 0]}>
+              {/* Upper Sphere (Red) */}
+              <mesh castShadow position={[0, 0.02, 0]}>
+                <sphereGeometry args={[0.065, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                <meshStandardMaterial color="#e03131" roughness={0.25} metalness={0.3} />
+              </mesh>
+              {/* Lower Sphere (White) */}
+              <mesh castShadow position={[0, 0.02, 0]}>
+                <sphereGeometry args={[0.065, 12, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2]} />
+                <meshStandardMaterial color="#f8f9fa" roughness={0.25} />
+              </mesh>
+              {/* Middle seam belt */}
+              <mesh position={[0, 0.02, 0]}>
+                <cylinderGeometry args={[0.066, 0.066, 0.012, 12]} />
+                <meshStandardMaterial color="#1a1b1e" roughness={0.9} />
+              </mesh>
+              {/* Shiny white center trigger button */}
+              <mesh position={[0, 0.02, 0.062]} rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.015, 0.015, 0.01, 8]} />
+                <meshStandardMaterial color="#ffffff" roughness={0.1} emissive="#ffffff" emissiveIntensity={0.3} />
+              </mesh>
+            </group>
+          </group>
+        ))}
+
+        {/* Electronic scientific analyzer strip */}
+        <group position={[0, 0.4, 0.265]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.3, 0.16, 0.02]} />
+            <meshStandardMaterial color="#1a1b1e" />
+          </mesh>
+          {/* Blinking green pixel led */}
+          <mesh position={[-0.08, 0.02, 0.012]}>
+            <boxGeometry args={[0.02, 0.02, 0.01]} />
+            <meshStandardMaterial color="#40c057" emissive="#40c057" emissiveIntensity={1.5} />
+          </mesh>
+          <mesh position={[0.08, 0.02, 0.012]}>
+            <boxGeometry args={[0.02, 0.02, 0.01]} />
+            <meshStandardMaterial color="#fa5252" emissive="#fa5252" emissiveIntensity={0.5} />
+          </mesh>
+        </group>
+
+        {/* Clean glass protector dome on top */}
+        <mesh position={[0, 0.82, 0]} castShadow>
+          <boxGeometry args={[0.76, 0.28, 0.48]} />
+          <meshStandardMaterial color="#e7f5ff" transparent opacity={0.25} roughness={0.1} metalness={0.9} />
+        </mesh>
       </group>
 
       {/* Rival Gary: Stands in front of his house (10, 5) */}
-      <group position={[10, 0, 5]}>
-        <TrainerModel role="RIVAL" heading="LEFT" scale={0.9} />
+      <group ref={rivalGroupRef} position={[10, 0, 5]}>
+        <TrainerModel role="RIVAL" heading={rivalHeading} state={rivalPacingState} scale={0.9} />
       </group>
 
       {/* Wild Pikachu Mascot: Hopping around grass (4, 6) */}
-      <group position={[4, 0, 6]}>
-        <PokemonModel name="Pikachu" color="#fcc419" scale={0.9} />
+      <group ref={pikachuGroupRef} position={[4, 0, 6]}>
+        <PokemonModel name="Pikachu" color="#fcc419" state="WALK" scale={0.9} />
       </group>
 
       {/* Wild Bulbasaur Mascot: Shaded near lake (2, 6) */}
-      <group position={[2, 0, 6]}>
-        <PokemonModel name="Bulbasaur" color="#3bc9db" scale={0.95} />
+      <group ref={bulbasaurGroupRef} position={[2, 0, 6]}>
+        <PokemonModel name="Bulbasaur" color="#3bc9db" state="WALK" scale={0.95} />
       </group>
 
       {/* Wild Charmander Mascot: Near east trees (12, 6) */}
-      <group position={[12, 0, 6]}>
-        <PokemonModel name="Charmander" color="#ff922b" scale={0.9} />
+      <group ref={charmanderGroupRef} position={[12, 0, 6]}>
+        <PokemonModel name="Charmander" color="#ff922b" state="WALK" scale={0.9} />
       </group>
 
       {/* Red's Mailbox (2, 4) */}
@@ -822,20 +1392,61 @@ export function World() {
         </mesh>
       </group>
 
-      {/* Fishing Pier dock */}
+      {/* Fishing Pier dock (Route 21 Lake Area) */}
       <group position={[5, 0.02, 12.2]}>
+        {/* Main weathered logs deck */}
         <mesh position={[0, 0.02, 0]} castShadow receiveShadow>
           <boxGeometry args={[0.92, 0.04, 0.82]} />
           <meshStandardMaterial color="#8c5a3c" roughness={0.9} />
         </mesh>
-        <mesh position={[-0.4, -0.15, 0.3]} castShadow>
-          <cylinderGeometry args={[0.04, 0.04, 0.4, 8]} />
-          <meshStandardMaterial color="#5c3e10" />
+        {/* Support columns going deep into water */}
+        <mesh position={[-0.4, -0.22, 0.3]} castShadow>
+          <cylinderGeometry args={[0.05, 0.05, 0.52, 8]} />
+          <meshStandardMaterial color="#5c3e10" roughness={1.0} />
         </mesh>
-        <mesh position={[0.4, -0.15, 0.3]} castShadow>
-          <cylinderGeometry args={[0.04, 0.04, 0.4, 8]} />
-          <meshStandardMaterial color="#5c3e10" />
+        <mesh position={[0.4, -0.22, 0.3]} castShadow>
+          <cylinderGeometry args={[0.05, 0.05, 0.52, 8]} />
+          <meshStandardMaterial color="#5c3e10" roughness={1.0} />
         </mesh>
+        <mesh position={[-0.4, -0.22, -0.3]} castShadow>
+          <cylinderGeometry args={[0.05, 0.05, 0.52, 8]} />
+          <meshStandardMaterial color="#5c3e10" roughness={1.0} />
+        </mesh>
+        <mesh position={[0.4, -0.22, -0.3]} castShadow>
+          <cylinderGeometry args={[0.05, 0.05, 0.52, 8]} />
+          <meshStandardMaterial color="#5c3e10" roughness={1.0} />
+        </mesh>
+
+        {/* Dynamic bobbing buoy floating in nearby water (coordinate 5.8, 13.0) */}
+        <group position={[1.4, -0.05, 0.8]}>
+          <mesh castShadow>
+            <sphereGeometry args={[0.09, 8, 8]} />
+            <meshStandardMaterial color="#ff922b" roughness={0.5} /> {/* Orange buoy body */}
+          </mesh>
+          <mesh position={[0, 0.08, 0]} castShadow>
+            <cylinderGeometry args={[0.015, 0.015, 0.12, 6]} />
+            <meshStandardMaterial color="#212529" /> {/* Indicator post */}
+          </mesh>
+          <mesh position={[0, 0.14, 0]} castShadow>
+            <sphereGeometry args={[0.02, 4, 4]} />
+            <meshStandardMaterial color="#fa5252" emissive="#fa5252" emissiveIntensity={1.0} /> {/* Warning light */}
+          </mesh>
+          {/* Support ring */}
+          <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -0.03, 0]}>
+            <torusGeometry args={[0.1, 0.02, 4, 8]} />
+            <meshStandardMaterial color="#f8f9fa" />
+          </mesh>
+        </group>
+      </group>
+
+      {/* HIGH-FIDELITY ACTIVE GRASS WALK LEAF PARTICLES POOL */}
+      <group ref={leafParticlesGroupRef}>
+        {Array.from({ length: 24 }).map((_, i) => (
+          <mesh key={`leaf-p-${i}`} castShadow visible={false}>
+            <boxGeometry args={[0.08, 0.08, 0.02]} />
+            <meshStandardMaterial color="#40c057" roughness={0.8} />
+          </mesh>
+        ))}
       </group>
 
     </group>

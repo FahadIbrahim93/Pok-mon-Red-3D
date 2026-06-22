@@ -6,16 +6,19 @@ interface TrainerModelProps {
   role: 'OAK' | 'RIVAL' | 'TRAINER' | 'GIRL' | 'MASCAL_PIKA';
   heading?: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
   scale?: number;
+  state?: 'IDLE' | 'WALK';
 }
 
-export function TrainerModel({ role, heading = 'DOWN', scale = 1.0 }: TrainerModelProps) {
+export function TrainerModel({ role, heading = 'DOWN', scale = 1.0, state = 'IDLE' }: TrainerModelProps) {
   const groupRef = useRef<Group>(null);
   const headRef = useRef<Group>(null);
   const bodyRef = useRef<Group>(null);
+  const leftLegRef = useRef<Group>(null);
+  const rightLegRef = useRef<Group>(null);
 
-  useFrame((state) => {
+  useFrame((stateObj) => {
     if (!groupRef.current) return;
-    const time = state.clock.getElapsedTime();
+    const time = stateObj.clock.getElapsedTime();
 
     // Gentle life-like idle breathing animation
     if (headRef.current) {
@@ -28,6 +31,16 @@ export function TrainerModel({ role, heading = 'DOWN', scale = 1.0 }: TrainerMod
         1.0 + Math.sin(time * 2.0) * 0.005, 
         1.0
       );
+    }
+
+    // Walking leg animation cycle
+    if (state === 'WALK') {
+      const swingAngle = Math.sin(time * 10) * 0.42;
+      if (leftLegRef.current) leftLegRef.current.rotation.x = swingAngle;
+      if (rightLegRef.current) rightLegRef.current.rotation.x = -swingAngle;
+    } else {
+      if (leftLegRef.current) leftLegRef.current.rotation.x = 0;
+      if (rightLegRef.current) rightLegRef.current.rotation.x = 0;
     }
   });
 
@@ -99,16 +112,20 @@ export function TrainerModel({ role, heading = 'DOWN', scale = 1.0 }: TrainerMod
         </group>
 
         {/* Left Leg */}
-        <mesh position={[-0.12, -0.36, 0]} castShadow>
-          <boxGeometry args={[0.14, 0.24, 0.16]} />
-          <meshStandardMaterial color={pantsColor} roughness={0.8} />
-        </mesh>
+        <group ref={leftLegRef} position={[-0.12, -0.24, 0]}>
+          <mesh position={[0, -0.12, 0]} castShadow>
+            <boxGeometry args={[0.14, 0.24, 0.16]} />
+            <meshStandardMaterial color={pantsColor} roughness={0.8} />
+          </mesh>
+        </group>
 
         {/* Right Leg */}
-        <mesh position={[0.12, -0.36, 0]} castShadow>
-          <boxGeometry args={[0.14, 0.24, 0.16]} />
-          <meshStandardMaterial color={pantsColor} roughness={0.8} />
-        </mesh>
+        <group ref={rightLegRef} position={[0.12, -0.24, 0]}>
+          <mesh position={[0, -0.12, 0]} castShadow>
+            <boxGeometry args={[0.14, 0.24, 0.16]} />
+            <meshStandardMaterial color={pantsColor} roughness={0.8} />
+          </mesh>
+        </group>
 
       </group>
 

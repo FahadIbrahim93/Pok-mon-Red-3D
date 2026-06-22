@@ -25,6 +25,7 @@ export function PokemonModel({
   const earsGroupRef = useRef<Group>(null);
   const bodyRef = useRef<Mesh>(null);
   const tailRef = useRef<Group>(null);
+  const flameMeshRef = useRef<Mesh>(null);
 
   const normName = name.toUpperCase();
 
@@ -109,6 +110,19 @@ export function PokemonModel({
       groupRef.current.position.y = -0.3;
     } else {
       groupRef.current.position.x = 0;
+    }
+
+    // 6. Lit tail flame flickering animation if starter flame
+    if (flameMeshRef.current) {
+      flameMeshRef.current.scale.set(
+        1.0 + Math.sin(time * 19.0) * 0.16,
+        1.0 + Math.cos(time * 23.0) * 0.16,
+        1.0 + Math.sin(time * 17.0) * 0.16
+      );
+      const mat = flameMeshRef.current.material as any;
+      if (mat) {
+        mat.emissiveIntensity = 1.35 + Math.sin(time * 26.0) * 0.45;
+      }
     }
   });
 
@@ -240,7 +254,7 @@ export function PokemonModel({
                   <meshStandardMaterial color={primaryColor} />
                 </mesh>
                 {/* Lit Tail Fire box */}
-                <mesh position={[0, 0.2, -0.1]} castShadow>
+                <mesh ref={flameMeshRef} position={[0, 0.2, -0.1]} castShadow>
                   <boxGeometry args={[0.14, 0.14, 0.14]} />
                   <meshStandardMaterial color="#fd7e14" emissive="#ff922b" emissiveIntensity={2.0} />
                 </mesh>
