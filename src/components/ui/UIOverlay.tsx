@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { Sparkles, Backpack, Swords, HelpCircle, Clock, Sun, Moon, CloudSun, Sunset } from 'lucide-react';
 import { DialogueBox } from './DialogueBox';
+import { PokemonCenterAnimation } from './PokemonCenterAnimation';
 
 export function UIOverlay() {
   const dialogue = useGameStore((state) => state.dialogue);
@@ -168,6 +169,7 @@ export function UIOverlay() {
 
       {/* Modular Dialogue System with character portraits and typewriter effects */}
       <DialogueBox />
+      <PokemonCenterAnimation />
     </div>
   );
 }

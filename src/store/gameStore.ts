@@ -232,7 +232,6 @@ const syncQuests = (quests: Quest[], party: Pokemon[], pokedex: Record<string, a
     } 
     
 
-
     return updated;
   });
 };
@@ -262,6 +261,7 @@ interface GameState {
   bgmEnabled: boolean;
   starterChosen: boolean;
   showStarterModal: boolean;
+  centerHealing: 'IDLE' | 'HEALING' | 'DONE';
   metOak: boolean;
   readSign: boolean;
   hiddenTreasureClaimed: boolean;
@@ -303,6 +303,8 @@ interface GameState {
     claimHiddenTreasure: () => void;
     usePokemonCenter: () => void;
     purchaseItem: (itemId: string) => void;
+    setCenterHealing: (status: 'IDLE' | 'HEALING' | 'DONE') => void;
+    healAllPokemon: () => void;
 
     toggleFavoriteItem: (id: string) => void;
     useOverworldItem: (id: string) => void;
@@ -377,6 +379,7 @@ export const useGameStore = create<GameState>()(
       hiddenTreasureClaimed: false,
       starterChosen: false,
       showStarterModal: false,
+      centerHealing: 'IDLE',
       metOak: false,
 
       actions: {
@@ -934,6 +937,23 @@ export const useGameStore = create<GameState>()(
 
         usePokemonCenter: () => {
           set((state) => {
+            // Don't start healing if no Pokémon to heal
+            if (state.party.length === 0) {
+              return { dialogue: "NURSE JOY: 'You don't have any Pokémon with you, dear. Come back when you have a partner!'" };
+            }
+            
+            // Check if all party already at full health
+            const allFull = state.party.every(p => p.hp >= p.maxHp);
+            if (allFull) {
+              return { dialogue: "NURSE JOY: 'Your Pokémon look perfectly healthy already! Take good care of them!'" };
+            }
+            
+            return { centerHealing: 'HEALING', dialogue: null };
+          });
+        },
+
+        healAllPokemon: () => {
+          set((state) => {
             const nextParty = state.party.map(p => ({
               ...p,
               hp: p.maxHp
@@ -946,6 +966,7 @@ export const useGameStore = create<GameState>()(
             return {
               party: nextParty,
               pcBox: nextPcBox,
+              centerHealing: 'DONE',
               dialogue: "NURSE JOY: 'Your Pokémon have been fully restored to perfect health! We hope to see you again!'"
             };
           });
@@ -1175,7 +1196,9 @@ export const useGameStore = create<GameState>()(
           set({ showStarterModal: false });
         },
 
-
+        setCenterHealing: (status: 'IDLE' | 'HEALING' | 'DONE') => {
+          set({ centerHealing: status });
+        },
 
         chooseStarter: (name) => {
           set((state) => {

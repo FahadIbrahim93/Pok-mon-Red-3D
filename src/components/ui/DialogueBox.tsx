@@ -36,6 +36,10 @@ export function DialogueBox() {
       speakerName = 'CHARMANDER';
       messageContent = dialogue.replace('CHARMANDER:', '').trim();
       portraitType = 'CHARMANDER';
+    } else if (dialogue.startsWith('NURSE JOY:')) {
+      speakerName = 'NURSE JOY';
+      messageContent = dialogue.replace('NURSE JOY:', '').trim();
+      portraitType = 'NURSE_JOY';
     } else if (
       dialogue.includes('A sign!') || 
       dialogue.includes('says:') || 
@@ -194,6 +198,37 @@ export function DialogueBox() {
             </div>
             <div className="absolute bottom-0 w-full h-7 bg-orange-950 flex justify-center items-center">
               <span className="text-[9px] text-orange-300 font-black">CHAR</span>
+            </div>
+          </div>
+        );
+      case 'NURSE_JOY':
+        return (
+          <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-pink-500 border-4 border-pink-700 flex flex-col justify-end overflow-hidden shadow-inner">
+            {/* Nurse cap */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-14 h-6 bg-white rounded-b-xl border-b-2 border-pink-300 flex items-center justify-center">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+            </div>
+            {/* Face */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pt-5">
+              {/* Eyes */}
+              <div className="flex gap-3 mb-1.5">
+                <div className="w-2 h-2 rounded-full bg-zinc-800" />
+                <div className="w-2 h-2 rounded-full bg-zinc-800" />
+              </div>
+              {/* Smile */}
+              <div className="w-4 h-2 rounded-b-full bg-rose-300" />
+              {/* Blush */}
+              <div className="flex gap-4 mt-1">
+                <div className="w-2 h-1 rounded-full bg-pink-400/60" />
+                <div className="w-2 h-1 rounded-full bg-pink-400/60" />
+              </div>
+            </div>
+            {/* Pink uniform collar */}
+            <div className="absolute bottom-0 w-full h-7 bg-pink-200 border-t border-pink-300 flex justify-center items-center">
+              <span className="text-[9px] text-pink-800 font-black">NURSE</span>
+            </div>
+            <div className="absolute -top-0.5 -right-0.5">
+              <span className="text-xs">✨</span>
             </div>
           </div>
         );
