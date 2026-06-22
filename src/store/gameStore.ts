@@ -47,7 +47,7 @@ export interface BattleState {
   playerActiveIndex: number;
   turn: 'PLAYER' | 'OPPONENT' | 'END';
   log: string[];
-  menuState: 'MAIN' | 'FIGHT' | 'ITEM' | 'VICTORY';
+  menuState: 'MAIN' | 'FIGHT' | 'ITEM' | 'SWITCH' | 'VICTORY';
   playerStatus: StatusEffect;
   opponentStatus: StatusEffect;
   playerStatStages: StatStages;
@@ -301,7 +301,9 @@ interface GameState {
     toggleBgm: () => void;
     triggerReadSign: () => void;
     claimHiddenTreasure: () => void;
-    
+    usePokemonCenter: () => void;
+    purchaseItem: (itemId: string) => void;
+
     toggleFavoriteItem: (id: string) => void;
     useOverworldItem: (id: string) => void;
     closeTownMap: () => void;
@@ -393,7 +395,9 @@ export const useGameStore = create<GameState>()(
             // Checking if the step leads to a Wild Pokémon encounter in Grass
             if (tile === TileType.GRASS && state.mode === 'OVERWORLD') {
               if (Math.random() < 0.14) { // 14% step-encounter chance
-                const wildOpponent = generateWildPokemon();
+                // Route 1 area (z <= 5 north of town) uses ROUTE_1 encounter table
+                const encounterTable = z <= 5 ? 'ROUTE_1' : (x <= 4 || x >= 10 ? 'GRASS_FOREST' : 'GRASS_PALLET');
+                const wildOpponent = generateWildPokemon(encounterTable);
                 
                 // Immediately register species as SEEN in our Pokedex
                 const nextPokedex = { ...state.pokedex };
@@ -924,6 +928,54 @@ export const useGameStore = create<GameState>()(
               pcBox: nextPcBox,
               party: nextParty,
               dialogue: "OAK'S PC SYSTEM: Initialized full scan and recovery. All Party partners and Box Pokémon were restored to 100% HEALTH!"
+            };
+          });
+        },
+
+        usePokemonCenter: () => {
+          set((state) => {
+            const nextParty = state.party.map(p => ({
+              ...p,
+              hp: p.maxHp
+            }));
+            const nextPcBox = (state.pcBox || []).map(p => ({
+              ...p,
+              hp: p.maxHp
+            }));
+            soundManager.playSFX('heal');
+            return {
+              party: nextParty,
+              pcBox: nextPcBox,
+              dialogue: "NURSE JOY: 'Your Pokémon have been fully restored to perfect health! We hope to see you again!'"
+            };
+          });
+        },
+
+        purchaseItem: (itemId: string) => {
+          set((state) => {
+            const SHOP_ITEMS: Record<string, { name: string; displayName: string; description: string; price: number; category: string; effectPower?: number }> = {
+              'buy_potion': { name: 'POTION', displayName: 'Potion', description: 'Restores 20 HP.', price: 200, category: 'RECOVERY', effectPower: 20 },
+              'buy_super_potion': { name: 'SUPER_POTION', displayName: 'Super Potion', description: 'Restores 50 HP.', price: 500, category: 'RECOVERY', effectPower: 50 },
+              'buy_pokeball': { name: 'POKEBALL', displayName: 'Poké-Ball', description: 'Captures wild Pokémon.', price: 200, category: 'CAPTURE' },
+              'buy_greatball': { name: 'GREATBALL', displayName: 'Great Ball', description: 'Better capture rate.', price: 600, category: 'CAPTURE' },
+              'buy_antidote': { name: 'ANTIDOTE', displayName: 'Antidote', description: 'Cures poison.', price: 100, category: 'STATUS_HEAL' },
+            };
+            const shopItem = SHOP_ITEMS[itemId];
+            if (!shopItem) return { dialogue: 'That item is not available.' };
+            if ((state.gold ?? 0) < shopItem.price) {
+              return { dialogue: `You need ${shopItem.price} gold for a ${shopItem.displayName}! You only have ${state.gold ?? 0} gold. Come back with more!` };
+            }
+            const nextItems = state.inventoryItems.map(item => {
+              if (item.name === shopItem.name) {
+                return { ...item, quantity: item.quantity + 1 };
+              }
+              return item;
+            });
+            soundManager.playSFX('click');
+            return {
+              gold: (state.gold ?? 0) - shopItem.price,
+              inventoryItems: nextItems,
+              dialogue: `Thank you! You purchased 1× ${shopItem.displayName} for ${shopItem.price} gold!`
             };
           });
         },

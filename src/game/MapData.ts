@@ -62,6 +62,11 @@ export const interactionMap: Record<string, string> = {
   // NEW interactions
   "7,11": "ROUTE 1 MARKER: 'Route 1 — Pallet Town to Viridian City. Wild Pokémon inhabit the tall grass. Trainers, be prepared!'",
   "14,9": "HIDDEN BERRY BUSH: A small bush with ripe, juicy berries. They smell delicious and attract wild Pokémon!",
+
+  // Pokémon Center door at (2,9) - player stands at (2,10) facing UP
+  "2,9": "POKÉMON CENTER: 'Welcome to the Pallet Town Pokémon Center! Would you like us to restore your Pokémon to full health?'",
+  // Poké Mart door at (12,9) - player stands at (12,10) facing UP
+  "12,9": "POKÉ MART: 'Welcome! We've got the finest selection of items for trainers like you! Stock up before your journey!'"
 };
 
 export const checkCollision = (x: number, z: number): boolean => {
@@ -86,6 +91,11 @@ export const checkCollision = (x: number, z: number): boolean => {
   if (x === 6 && z === 10) return true; // Lab trash can
   if (x === 14 && z === 9) return true; // Hidden berry bush (NEW)
   if (x === 7 && z === 11) return true; // Route marker (NEW)
+
+  // Pokémon Center colliders (1,7)-(3,9)
+  if (x >= 1 && x <= 3 && z >= 7 && z <= 9) return true;
+  // Poké Mart colliders (11,7)-(13,9)
+  if (x >= 11 && x <= 13 && z >= 7 && z <= 9) return true;
 
   const tile = mapGrid[z]?.[x];
   return tile === TileType.SOLID || tile === TileType.WATER; // Cannot walk on solid or water

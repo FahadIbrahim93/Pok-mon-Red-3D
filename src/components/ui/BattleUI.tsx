@@ -75,15 +75,16 @@ export function BattleUI() {
       if (menuState === 'MAIN') maxIdx = 3;
       if (menuState === 'FIGHT') maxIdx = activePokemon.moves.length - 1;
       if (menuState === 'ITEM') maxIdx = 1;
+      if (menuState === 'SWITCH') maxIdx = party.length - 1;
       
       switch (e.key) {
         case 'ArrowUp':
         case 'w':
-          setCursorIdx(curr => Math.max(0, curr - (menuState === 'FIGHT' ? 1 : (menuState === 'ITEM' ? 1 : 2))));
+          setCursorIdx(curr => Math.max(0, curr - (menuState === 'FIGHT' ? 1 : (menuState === 'ITEM' ? 1 : (menuState === 'SWITCH' ? 1 : 2)))));
           break;
         case 'ArrowDown':
         case 's':
-          setCursorIdx(curr => Math.min(maxIdx, curr + (menuState === 'FIGHT' ? 1 : (menuState === 'ITEM' ? 1 : 2))));
+          setCursorIdx(curr => Math.min(maxIdx, curr + (menuState === 'FIGHT' ? 1 : (menuState === 'ITEM' ? 1 : (menuState === 'SWITCH' ? 1 : 2)))));
           break;
         case 'ArrowLeft':
         case 'a':
@@ -318,7 +319,13 @@ export function BattleUI() {
             actions.setBattleMenuState('FIGHT'); 
             setCursorIdx(0); 
           } else if (actualIdx === 1) { 
-            actions.addBattleLog("There's no time to switch Pokémon!");
+            // Open party switch menu
+            if (party.length <= 1) {
+              actions.addBattleLog("You have no other Pokémon to switch to!");
+            } else {
+              actions.setBattleMenuState('SWITCH');
+              setCursorIdx(0);
+            }
           } else if (actualIdx === 2) { 
             // Enter Bag Submenu
             actions.setBattleMenuState('ITEM'); 
@@ -326,6 +333,21 @@ export function BattleUI() {
           } else if (actualIdx === 3) { // RUN
              actions.addBattleLog("Got away safely!");
              setTimeout(() => { actions.endBattle(); }, 1500);
+          }
+      } else if (menuState === 'SWITCH') {
+          if (actualIdx < party.length && actualIdx !== battle.playerActiveIndex) {
+            const newActive = party[actualIdx];
+            if (newActive.hp <= 0) {
+              actions.addBattleLog(`${newActive.name} has no energy left to battle!`);
+              return;
+            }
+            actions.swapPartyMembers(actualIdx);
+            actions.addBattleLog(`Come back, ${activePokemon.name}! Go, ${newActive.name}!`);
+            actions.resetStatStages('PLAYER');
+            actions.applyStatusEffect('PLAYER', 'NONE');
+            actions.setTurn('OPPONENT');
+            actions.setBattleMenuState('MAIN');
+            setCursorIdx(0);
           }
       } else if (menuState === 'ITEM') {
           if (actualIdx === 0) { // POTION
@@ -781,6 +803,7 @@ export function BattleUI() {
                    {menuState === 'MAIN' && <span className="leading-relaxed">WHAT WILL<br/>{activePokemon.name} DO?</span>}
                    {menuState === 'FIGHT' && <span>CHOOSE AN ATTACK</span>}
                    {menuState === 'ITEM' && <span>CHOOSE AN ITEM FROM BAG</span>}
+                   {menuState === 'SWITCH' && <span>SWITCH PARTY MEMBER</span>}
                 </div>
             )}
          </div>
@@ -795,9 +818,9 @@ export function BattleUI() {
                              <Swords size={16} className={cursorIdx === 0 ? 'text-yellow-300' : 'text-slate-400'} />
                              <span>FIGHT</span>
                          </button>,
-                         <button key="PKMN" className="flex items-center gap-2 justify-start px-4 py-2 border-2 rounded-xl bg-slate-950/40 border-slate-900/60 text-slate-600 cursor-not-allowed">
-                             <span className="w-4"></span>
-                             <span><s>PKMN</s></span>
+                         <button key="PKMN" className={`flex items-center gap-2 justify-start px-4 py-2 border-2 rounded-xl transition-all cursor-pointer ${cursorIdx === 1 ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg' : 'bg-slate-800/80 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(1); handleSelect(1); }}>
+                             <span className="w-4 flex items-center">{cursorIdx === 1 ? <ChevronRight size={18} /> : ''}</span>
+                             <span>PKMN</span>
                          </button>,
                          <button key="ITEM" className={`flex items-center gap-2 justify-start px-4 py-2 border-2 rounded-xl transition-all cursor-pointer ${cursorIdx === 2 ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg' : 'bg-slate-800/80 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(2); handleSelect(2); }}>
                              <span className="w-4 flex items-center">{cursorIdx === 2 ? <ChevronRight size={18} /> : ''}</span>
@@ -826,6 +849,49 @@ export function BattleUI() {
                              <span className="text-xs bg-slate-900 px-2.5 py-1 rounded-md text-slate-300 border border-slate-700">QTY: {pokeballs}</span>
                          </button>,
                          <button key="BACK_ITEM" className="flex items-center gap-2 cursor-pointer col-span-2 text-slate-400 hover:text-white mt-1 justify-center py-1 text-sm font-bold bg-slate-900/60 rounded-lg hover:bg-slate-900 border border-slate-800 font-mono" onClick={() => { actions.setBattleMenuState('MAIN'); setCursorIdx(0); }}>
+                             <span>[ RETURN TO BATTLE OPTIONS ]</span>
+                         </button>
+                     ]}
+
+                     {menuState === 'SWITCH' && [
+                         ...party.map((pkmn, i) => {
+                           const isActive = i === battle.playerActiveIndex;
+                           const canFight = pkmn.hp > 0;
+                           const hpPercent = pkmn.hp / pkmn.maxHp;
+                           return (
+                             <button 
+                               key={pkmn.id}
+                               className={`flex items-center justify-between px-4 py-2 border-2 rounded-xl transition-all cursor-pointer col-span-2 ${cursorIdx === i ? 'bg-[#d0bfff] text-[#6741d9] border-[#b197fc] shadow-lg' : 'bg-slate-800 border-slate-700 hover:bg-slate-800'}`}
+                               onClick={() => {
+                                 if (!canFight) return;
+                                 if (isActive) {
+                                   actions.addBattleLog(`${pkmn.name} is already in battle!`);
+                                   return;
+                                 }
+                                 setCursorIdx(i);
+                                 handleSelect(i);
+                               }}
+                               style={{ opacity: isActive ? 0.5 : canFight ? 1 : 0.4 }}
+                             >
+                               <span className="flex items-center gap-2">
+                                 <span className="w-4 flex items-center">{cursorIdx === i ? <ChevronRight size={18} /> : ''}</span>
+                                 <span className="flex items-center gap-1.5">
+                                   <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: pkmn.color }} />
+                                   <span>{pkmn.name}</span>
+                                 </span>
+                                 {isActive && <span className="text-[10px] text-slate-500">[OUT]</span>}
+                                 {!canFight && <span className="text-[10px] text-red-500">[FAINT]</span>}
+                               </span>
+                               <span className="flex items-center gap-2">
+                                 <span className={`text-xs font-bold ${hpPercent > 0.5 ? 'text-green-400' : hpPercent > 0.2 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                   {pkmn.hp}/{pkmn.maxHp}
+                                 </span>
+                                 <span className="text-[10px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-300">Lv{pkmn.level}</span>
+                               </span>
+                             </button>
+                           );
+                         }),
+                         <button key="BACK_SWITCH" className="flex items-center gap-2 cursor-pointer col-span-2 text-slate-400 hover:text-white mt-1 justify-center py-1 text-sm font-bold bg-slate-900/60 rounded-lg hover:bg-slate-900 border border-slate-800 font-mono" onClick={() => { actions.setBattleMenuState('MAIN'); setCursorIdx(0); }}>
                              <span>[ RETURN TO BATTLE OPTIONS ]</span>
                          </button>
                      ]}

@@ -13,6 +13,20 @@ export function usePlayerControls() {
       if (state.mode === 'BATTLE') return;
 
       if (dialogue) {
+        // Check for Poké Mart shop number keys (1-5)
+        if (dialogue.includes('POKÉ MART')) {
+          const shopKeys: Record<string, string> = {
+            '1': 'buy_potion',
+            '2': 'buy_super_potion',
+            '3': 'buy_pokeball',
+            '4': 'buy_greatball',
+            '5': 'buy_antidote',
+          };
+          if (e.key >= '1' && e.key <= '5') {
+            actions.purchaseItem(shopKeys[e.key]);
+            return;
+          }
+        }
         if (e.key === 'z' || e.key === 'x' || e.key === 'Enter' || e.key === ' ') {
           actions.clearDialogue();
         }
@@ -84,10 +98,19 @@ export function usePlayerControls() {
         if (targetX === 1 && targetZ === 1) {
           actions.claimHiddenTreasure();
         } else {
-          // Check if we're interacting with Oak's Starter Table and starter not chosen
           const state = useGameStore.getState();
+          // Check if we're interacting with Oak's Starter Table and starter not chosen
           if (targetX === 8 && targetZ === 7 && state.party.length === 0) {
             actions.openStarterModal();
+          } else if (targetX === 2 && targetZ === 9) {
+            // Pokémon Center — heal all Pokémon
+            actions.usePokemonCenter();
+          } else if (targetX === 12 && targetZ === 9) {
+            // Poké Mart — show shop dialogue with item list
+            const gold = state.gold ?? 0;
+            actions.showDialogue(
+              `POKÉ MART CLERK: 'Welcome, trainer! We've got:\n[1] Potion (200g) — Restores 20 HP\n[2] Super Potion (500g) — Restores 50 HP\n[3] Poké Ball (200g) — Catch wild Pokémon\n[4] Great Ball (600g) — Better catch rate\n[5] Antidote (100g) — Cures poison\n\nYou have ${gold} gold.\nPress 1-5 to buy, or Z to leave.'`
+            );
           } else {
             actions.showDialogue(text);
             
