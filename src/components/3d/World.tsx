@@ -1439,6 +1439,229 @@ export function World() {
         </group>
       </group>
 
+      {/* ROUTE 1 DIRECTIONAL MARKER (7, 11) */}
+      <group position={[7, 0, 11]}>
+        {/* Tall weathered wooden post */}
+        <mesh position={[0, 0.6, 0]} castShadow>
+          <cylinderGeometry args={[0.04, 0.055, 1.2, 7]} />
+          <meshStandardMaterial color="#8c5a3c" roughness={0.9} />
+        </mesh>
+        {/* Decorative crossbeam */}
+        <mesh position={[0, 1.05, -0.02]} castShadow>
+          <boxGeometry args={[0.28, 0.04, 0.06]} />
+          <meshStandardMaterial color="#6a4c33" roughness={0.9} />
+        </mesh>
+        {/* Route 1 Shield Sign */}
+        <group position={[0, 1.25, 0.02]}>
+          {/* Green shield background */}
+          <mesh castShadow>
+            <boxGeometry args={[0.28, 0.22, 0.04]} />
+            <meshStandardMaterial color="#2b8a3e" roughness={0.5} />
+          </mesh>
+          {/* White border */}
+          <mesh position={[0, 0, 0.022]}>
+            <boxGeometry args={[0.24, 0.18, 0.01]} />
+            <meshStandardMaterial color="#f8f9fa" roughness={0.3} />
+          </mesh>
+          {/* Route number indicators via colored dots */}
+          <mesh position={[-0.07, 0.05, 0.032]}>
+            <boxGeometry args={[0.03, 0.03, 0.01]} />
+            <meshStandardMaterial color="#1a1b1e" />
+          </mesh>
+          <mesh position={[0.07, 0.05, 0.032]}>
+            <boxGeometry args={[0.03, 0.03, 0.01]} />
+            <meshStandardMaterial color="#1a1b1e" />
+          </mesh>
+          {/* "1" indicator bar */}
+          <mesh position={[0, -0.03, 0.032]}>
+            <boxGeometry args={[0.06, 0.04, 0.01]} />
+            <meshStandardMaterial color="#1a1b1e" />
+          </mesh>
+        </group>
+        {/* Directional arrow pointing down */}
+        <mesh position={[0, 1.0, 0.03]} rotation={[0, 0, Math.PI]} castShadow>
+          <coneGeometry args={[0.05, 0.08, 4]} />
+          <meshStandardMaterial color="#fab005" />
+        </mesh>
+        {/* Little sign text lines */}
+        <mesh position={[0, 0.92, 0.03]}>
+          <boxGeometry args={[0.05, 0.015, 0.01]} />
+          <meshStandardMaterial color="#f8f9fa" />
+        </mesh>
+        <mesh position={[0, 0.88, 0.03]}>
+          <boxGeometry args={[0.03, 0.015, 0.01]} />
+          <meshStandardMaterial color="#f8f9fa" />
+        </mesh>
+      </group>
+
+      {/* HIDDEN BERRY BUSH (14, 9) */}
+      <group position={[14, 0, 9]}>
+        {/* Dark soil mound base */}
+        <mesh position={[0, 0.04, 0]} receiveShadow castShadow>
+          <cylinderGeometry args={[0.28, 0.34, 0.08, 8]} />
+          <meshStandardMaterial color="#5c3e10" roughness={1.0} />
+        </mesh>
+        {/* Main bush body - layered spheres for lush look */}
+        <mesh position={[0, 0.22, 0]} castShadow>
+          <sphereGeometry args={[0.28, 7, 7]} />
+          <meshStandardMaterial color="#2b8a3e" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[0.12, 0.3, 0.08]} castShadow>
+          <sphereGeometry args={[0.2, 6, 6]} />
+          <meshStandardMaterial color="#37b24d" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[-0.08, 0.32, -0.06]} castShadow>
+          <sphereGeometry args={[0.18, 6, 6]} />
+          <meshStandardMaterial color="#40c057" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[0, 0.38, 0]} castShadow>
+          <sphereGeometry args={[0.14, 5, 5]} />
+          <meshStandardMaterial color="#51cf66" roughness={0.9} flatShading />
+        </mesh>
+        {/* Ripe red berries */}
+        <mesh position={[-0.1, 0.28, 0.15]} castShadow>
+          <sphereGeometry args={[0.035, 6, 6]} />
+          <meshStandardMaterial color="#e03131" roughness={0.3} />
+        </mesh>
+        <mesh position={[0.12, 0.34, -0.05]} castShadow>
+          <sphereGeometry args={[0.03, 6, 6]} />
+          <meshStandardMaterial color="#fa5252" roughness={0.3} />
+        </mesh>
+        <mesh position={[-0.06, 0.4, 0.04]} castShadow>
+          <sphereGeometry args={[0.028, 6, 6]} />
+          <meshStandardMaterial color="#ff6b6b" roughness={0.3} />
+        </mesh>
+        <mesh position={[0.08, 0.26, -0.12]} castShadow>
+          <sphereGeometry args={[0.032, 6, 6]} />
+          <meshStandardMaterial color="#c92a2a" roughness={0.3} />
+        </mesh>
+        <mesh position={[-0.14, 0.22, -0.08]} castShadow>
+          <sphereGeometry args={[0.025, 6, 6]} />
+          <meshStandardMaterial color="#e03131" roughness={0.3} />
+        </mesh>
+        {/* Small leaves */}
+        <mesh position={[0.08, 0.2, 0.12]} rotation={[0.3, 0.5, 0]}>
+          <boxGeometry args={[0.04, 0.02, 0.04]} />
+          <meshStandardMaterial color="#51cf66" roughness={0.8} />
+        </mesh>
+        <mesh position={[-0.1, 0.18, -0.1]} rotation={[-0.2, -0.3, 0]}>
+          <boxGeometry args={[0.04, 0.02, 0.04]} />
+          <meshStandardMaterial color="#69db7c" roughness={0.8} />
+        </mesh>
+      </group>
+
+      {/* SCATTERED PATH ROCKS */}
+      {/* Rock cluster near lab entrance */}
+      <group position={[5.2, 0, 8.2]}>
+        <mesh position={[0, 0.04, 0]} castShadow>
+          <dodecahedronGeometry args={[0.07, 0]} />
+          <meshStandardMaterial color="#868e96" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[0.1, 0.025, 0.06]} castShadow>
+          <dodecahedronGeometry args={[0.04, 0]} />
+          <meshStandardMaterial color="#6c757d" roughness={0.9} flatShading />
+        </mesh>
+      </group>
+      {/* Rock cluster near lake path */}
+      <group position={[5.8, 0, 11.5]}>
+        <mesh position={[0, 0.03, 0]} castShadow>
+          <dodecahedronGeometry args={[0.05, 0]} />
+          <meshStandardMaterial color="#868e96" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[-0.07, 0.02, 0.04]} castShadow>
+          <dodecahedronGeometry args={[0.035, 0]} />
+          <meshStandardMaterial color="#adb5bd" roughness={0.9} flatShading />
+        </mesh>
+      </group>
+      {/* Rock near forest edge */}
+      <group position={[13.5, 0, 2.5]}>
+        <mesh position={[0, 0.035, 0]} castShadow>
+          <dodecahedronGeometry args={[0.06, 0]} />
+          <meshStandardMaterial color="#868e96" roughness={0.9} flatShading />
+        </mesh>
+      </group>
+
+      {/* MUSHROOMS */}
+      {/* Mushroom cluster near Red's house */}
+      <group position={[4.5, 0, 2.5]}>
+        {/* Mushroom 1 */}
+        <mesh position={[0, 0.03, 0]} castShadow>
+          <cylinderGeometry args={[0.015, 0.02, 0.06, 6]} />
+          <meshStandardMaterial color="#f1f3f5" roughness={0.8} />
+        </mesh>
+        <mesh position={[0, 0.07, 0]} castShadow>
+          <sphereGeometry args={[0.04, 5, 5, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color="#f783ac" roughness={0.6} />
+        </mesh>
+        {/* Mushroom 2 */}
+        <mesh position={[0.08, 0.02, 0.06]} castShadow>
+          <cylinderGeometry args={[0.012, 0.016, 0.04, 6]} />
+          <meshStandardMaterial color="#f1f3f5" roughness={0.8} />
+        </mesh>
+        <mesh position={[0.08, 0.055, 0.06]} castShadow>
+          <sphereGeometry args={[0.03, 5, 5, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color="#fab005" roughness={0.6} />
+        </mesh>
+      </group>
+      {/* Mushroom near forest trees */}
+      <group position={[0.8, 0, 12.5]}>
+        <mesh position={[0, 0.025, 0]} castShadow>
+          <cylinderGeometry args={[0.012, 0.018, 0.05, 6]} />
+          <meshStandardMaterial color="#f1f3f5" roughness={0.8} />
+        </mesh>
+        <mesh position={[0, 0.06, 0]} castShadow>
+          <sphereGeometry args={[0.035, 5, 5, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color="#7950f2" roughness={0.6} /> {/* Purple glowshroom */}
+        </mesh>
+      </group>
+
+      {/* WOODEN BENCH near the Route 1 path */}
+      <group position={[6.5, 0.01, 11.5]}>
+        {/* Seat plank */}
+        <mesh position={[0, 0.28, 0]} castShadow>
+          <boxGeometry args={[0.45, 0.04, 0.14]} />
+          <meshStandardMaterial color="#8c5a3c" roughness={0.9} />
+        </mesh>
+        {/* Back rest */}
+        <mesh position={[0, 0.42, -0.07]} castShadow>
+          <boxGeometry args={[0.4, 0.18, 0.03]} />
+          <meshStandardMaterial color="#7a4a2c" roughness={0.9} />
+        </mesh>
+        {/* Left leg */}
+        <mesh position={[-0.16, 0.13, 0]} castShadow>
+          <boxGeometry args={[0.04, 0.26, 0.04]} />
+          <meshStandardMaterial color="#5c3e10" roughness={0.9} />
+        </mesh>
+        {/* Right leg */}
+        <mesh position={[0.16, 0.13, 0]} castShadow>
+          <boxGeometry args={[0.04, 0.26, 0.04]} />
+          <meshStandardMaterial color="#5c3e10" roughness={0.9} />
+        </mesh>
+        {/* Cross brace */}
+        <mesh position={[0, 0.12, 0]} castShadow>
+          <boxGeometry args={[0.36, 0.02, 0.02]} />
+          <meshStandardMaterial color="#5c3e10" roughness={0.9} />
+        </mesh>
+      </group>
+
+      {/* SMALL GRAVESTONE MEMORIAL near the east trees */}
+      <group position={[13.2, 0, 11.5]}>
+        <mesh position={[0, 0.18, 0]} castShadow>
+          <boxGeometry args={[0.16, 0.32, 0.08]} />
+          <meshStandardMaterial color="#adb5bd" roughness={0.7} />
+        </mesh>
+        {/* Rounded top */}
+        <mesh position={[0, 0.34, 0]} castShadow>
+          <sphereGeometry args={[0.08, 6, 6, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color="#ced4da" roughness={0.7} />
+        </mesh>
+        {/* Simple epitaph engraving */}
+        <mesh position={[0, 0.18, 0.041]}>
+          <boxGeometry args={[0.06, 0.03, 0.01]} />
+          <meshStandardMaterial color="#495057" />
+        </mesh>
+      </group>
+
       {/* HIGH-FIDELITY ACTIVE GRASS WALK LEAF PARTICLES POOL */}
       <group ref={leafParticlesGroupRef}>
         {Array.from({ length: 24 }).map((_, i) => (

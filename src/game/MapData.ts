@@ -12,7 +12,7 @@ export enum TileType {
 }
 
 // Simple layout: 0=grass, 1=path, 3=solid
-// 15x15 map
+// 15x15 map - KEPT AT 15x15 to maintain compatibility with World.tsx rendering
 export const mapGrid = [
   [3,3,3,3,3,3,3,3,3,3,3,3,3,3,3],
   [3,0,0,0,0,0,0,1,0,0,0,0,0,0,3],
@@ -47,7 +47,7 @@ export const interactionMap: Record<string, string> = {
   "12,6": "CHARMANDER: 'Char-char! *The lively flame on the tip of its tail dances in the breeze.*'",
   "8,7": "OAK'S STARTER TABLE: Three pristine red-and-white Poké Balls are placed neatly under the acrylic casing! Inside, the spirits of Bulbasaur, Charmander, and Squirtle wait patiently for their lifelong partners.",
 
-  // New highly immersive scenery interactions
+  // Scenery interactions
   "2,4": "RED'S MAILBOX: A postcard from your Mom in Cinnabar Island: 'Take care of your partners! Remember to change shoes when riding your bike!'",
   "9,4": "GARY'S MAILBOX: A glossy invitation letter from the Viridian Gym leader. Gary's name is hand-written on the invite...",
   "4,4": "RED'S FLOWER GARDEN: Sweet-smelling orange and yellow marigolds, tended carefully. They represent the fire inside every starting Trainer!",
@@ -57,7 +57,11 @@ export const interactionMap: Record<string, string> = {
   "6,10": "LAB TRASH CAN: You look inside... It's a half-eaten jelly donut! Red decides to leave it alone.",
   "5,13": "FISHING PIER: The lake water is crystal clear and sparkles under the Kanto sky. A wild Gyarados is said to slumber in the deep trenches.",
   "6,13": "FISHING PIER: Deep lake water. You see some small silhouette of wild Magikarp jumping playfully from time to time.",
-  "1,1": "SECRET TRUNK: You found a dust-coated chest! *You must press Z or Enter to open it.*"
+  "1,1": "SECRET TRUNK: You found a dust-coated chest! *You must press Z or Enter to open it.*",
+
+  // NEW interactions
+  "7,11": "ROUTE 1 MARKER: 'Route 1 — Pallet Town to Viridian City. Wild Pokémon inhabit the tall grass. Trainers, be prepared!'",
+  "14,9": "HIDDEN BERRY BUSH: A small bush with ripe, juicy berries. They smell delicious and attract wild Pokémon!",
 };
 
 export const checkCollision = (x: number, z: number): boolean => {
@@ -80,6 +84,8 @@ export const checkCollision = (x: number, z: number): boolean => {
   if (x === 5 && z === 10) return true; // Lab left terminal
   if (x === 9 && z === 10) return true; // Lab right bookshelf
   if (x === 6 && z === 10) return true; // Lab trash can
+  if (x === 14 && z === 9) return true; // Hidden berry bush (NEW)
+  if (x === 7 && z === 11) return true; // Route marker (NEW)
 
   const tile = mapGrid[z]?.[x];
   return tile === TileType.SOLID || tile === TileType.WATER; // Cannot walk on solid or water

@@ -84,11 +84,17 @@ export function usePlayerControls() {
         if (targetX === 1 && targetZ === 1) {
           actions.claimHiddenTreasure();
         } else {
-          actions.showDialogue(text);
-          
-          // Trigger Quest update when reading the Signpost at (8,4)
-          if (targetX === 8 && targetZ === 4) {
-            actions.triggerReadSign();
+          // Check if we're interacting with Oak's Starter Table and starter not chosen
+          const state = useGameStore.getState();
+          if (targetX === 8 && targetZ === 7 && state.party.length === 0) {
+            actions.openStarterModal();
+          } else {
+            actions.showDialogue(text);
+            
+            // Trigger Quest update when reading the Signpost at (8,4)
+            if (targetX === 8 && targetZ === 4) {
+              actions.triggerReadSign();
+            }
           }
         }
       }

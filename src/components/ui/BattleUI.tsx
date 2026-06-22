@@ -5,7 +5,19 @@ import { Canvas } from '@react-three/fiber';
 import { PokemonModel } from '../3d/PokemonModel';
 import { motion } from 'motion/react';
 import { AttackParticles } from '../3d/AttackParticles';
-import { getTypeEffectiveness, getPokemonTypes } from '../../game/pokemonData';
+import { getTypeEffectiveness, getPokemonTypes, getMoveDetails, checkEffectApplied, getStatusEffectName, getStageChangeDescription } from '../../game/pokemonData';
+
+const getStatusBadgeStyle = (status: string) => {
+  switch (status) {
+    case 'POISON': return 'bg-purple-900/80 text-purple-300 border border-purple-500/50';
+    case 'PARALYSIS': return 'bg-yellow-900/80 text-yellow-300 border border-yellow-500/50';
+    case 'SLEEP': return 'bg-sky-900/80 text-sky-300 border border-sky-500/50';
+    case 'CONFUSION': return 'bg-pink-900/80 text-pink-300 border border-pink-500/50';
+    case 'BURN': return 'bg-red-900/80 text-red-300 border border-red-500/50';
+    case 'FREEZE': return 'bg-cyan-900/80 text-cyan-300 border border-cyan-500/50';
+    default: return 'bg-slate-800 text-slate-400';
+  }
+};
 
 export function BattleUI() {
   const mode = useGameStore(state => state.mode);
@@ -100,58 +112,125 @@ export function BattleUI() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [mode, turn, log, menuState, cursorIdx, activePokemon]);
 
-  // OPPONENT turn logic
+  // OPPONENT turn logic — now with STATUS move support
   useEffect(() => {
       if (mode === 'BATTLE' && turn === 'OPPONENT') {
           const timer = setTimeout(() => {
               if (opponent) {
-                  const move = opponent.moves[Math.floor(Math.random() * opponent.moves.length)];
-                  setOpponentActionType(move.type);
+                  // Intelligent opponent AI: prefer status moves if player not already affected
+                  const hasStatModsAvailable = battle.playerStatStages.atk > -6 || battle.playerStatStages.def > -6 || battle.playerStatStages.acc > -6;
+                  const hasNoStatus = battle.playerStatus === 'NONE';
 
-                  const defenderTypes = getPokemonTypes(activePokemon.name);
-                  const { multiplier, description: typeDesc } = getTypeEffectiveness(move.type, defenderTypes);
-                  const calculatedDamage = Math.max(1, Math.round(move.power * multiplier));
+                  // Sort moves: prefer status if beneficial, otherwise pick best attacking move
+                  const sortedMoves = [...opponent.moves].sort((a, b) => {
+                    const fa = getMoveDetails(a.name);
+                    const fb = getMoveDetails(b.name);
+                    const aIsStatus = fa.category === 'STATUS' ? 1 : 0;
+                    const bIsStatus = fb.category === 'STATUS' ? 1 : 0;
+                    // Prefer status moves when they would be useful
+                    if (aIsStatus !== bIsStatus && (hasNoStatus || hasStatModsAvailable)) return bIsStatus - aIsStatus;
+                    // Otherwise prefer higher-power moves
+                    return (b.power || 0) - (a.power || 0);
+                  });
 
-                  actions.addBattleLog(`Enemy ${opponent.name} used ${move.name}!`);
-                  if (typeDesc) {
-                      actions.addBattleLog(typeDesc);
-                  }
-                  
-                  setTimeout(() => {
-                      // Trigger Flash & Shake player
-                      setScreenFlash(true);
-                      setPlayerDamaged(true);
-                      triggerFloater(`-${calculatedDamage} HP`, false);
-                      setActiveCombatEffect('scratch');
+                  const move = sortedMoves[0];
+                  const fullMove = getMoveDetails(move.name);
+                  setOpponentActionType(fullMove.type);
 
-                      setTimeout(() => {
-                        setScreenFlash(false);
-                        setPlayerDamaged(false);
-                        setActiveCombatEffect(null);
-                      }, 400);
+                  actions.addBattleLog(`Enemy ${opponent.name} used ${fullMove.name}!`);
 
-                      actions.applyDamage('PLAYER', calculatedDamage);
-                      const state = useGameStore.getState();
-                      const p = state.party[state.battle.playerActiveIndex];
-                      
-                      if (p.hp <= 0) {
-                          setTimeout(() => {
-                            actions.addBattleLog(`${p.name} fainted! You blacked out!`);
-                            setTimeout(() => {
-                                actions.endBattle();
-                            }, 2000);
-                          }, 500);
+                  // STATUS move handling for opponent
+                  if (fullMove.category === 'STATUS') {
+                    if (fullMove.effect) {
+                      const { type, target, chance, stages } = fullMove.effect;
+                      const actualTarget = target === 'SELF' ? 'OPPONENT' : 'PLAYER';
+                      const targetName = target === 'SELF' ? opponent.name : activePokemon.name;
+
+                      if (checkEffectApplied(chance)) {
+                        if (type === 'ATK' || type === 'DEF' || type === 'SPD' || type === 'ACC') {
+                          const mod = type as 'ATK' | 'DEF' | 'SPD' | 'ACC';
+                          actions.applyStatMod(actualTarget, mod, stages || -1);
+                          actions.addBattleLog(`${targetName}'s ${getStageChangeDescription(mod, stages || -1)}`);
+                        } else {
+                          const effectType = type as any;
+                          actions.applyStatusEffect(actualTarget, effectType);
+                          actions.addBattleLog(`${targetName} ${getStatusEffectName(type)}`);
+                        }
                       } else {
-                          actions.setTurn('PLAYER');
-                          actions.setBattleMenuState('MAIN');
-                          setCursorIdx(0);
+                        actions.addBattleLog(`But it had no effect!`);
                       }
-                  }, 1200);
+                    }
+                    // After opponent status move, it's the player's turn
+                    setTimeout(() => {
+                      actions.setTurn('PLAYER');
+                      actions.setBattleMenuState('MAIN');
+                      setCursorIdx(0);
+                    }, 600);
+                  } else {
+                    // PHYSICAL / SPECIAL damage move
+                    const defenderTypes = getPokemonTypes(activePokemon.name);
+                    const { multiplier, description: typeDesc } = getTypeEffectiveness(fullMove.type, defenderTypes);
+                    // Apply stat stage modifiers
+                    const atkStages = battle.opponentStatStages.atk;
+                    const defStages = battle.playerStatStages.def;
+                    const atkMultiplier = atkStages >= 0 ? (2 + atkStages) / 2 : 2 / (2 - atkStages);
+                    const defMultiplier = defStages >= 0 ? (2 + defStages) / 2 : 2 / (2 - defStages);
+                    const calculatedDamage = Math.max(1, Math.round(fullMove.power * multiplier * (atkMultiplier / defMultiplier)));
+
+                    if (typeDesc) {
+                        actions.addBattleLog(typeDesc);
+                    }
+                    
+                    setTimeout(() => {
+                        // Trigger Flash & Shake player
+                        setScreenFlash(true);
+                        setPlayerDamaged(true);
+                        triggerFloater(`-${calculatedDamage} HP`, false);
+                        setActiveCombatEffect('scratch');
+
+                        setTimeout(() => {
+                          setScreenFlash(false);
+                          setPlayerDamaged(false);
+                          setActiveCombatEffect(null);
+                        }, 400);
+
+                        actions.applyDamage('PLAYER', calculatedDamage);
+
+                        // Check for move secondary effects on player
+                        if (fullMove.effect && checkEffectApplied(fullMove.effect.chance)) {
+                          const { type } = fullMove.effect;
+                          if (type !== 'ATK' && type !== 'DEF' && type !== 'SPD' && type !== 'ACC') {
+                            const effectType = type as any;
+                            const state = useGameStore.getState();
+                            if (state.battle.playerStatus === 'NONE') {
+                              actions.applyStatusEffect('PLAYER', effectType);
+                              actions.addBattleLog(`${activePokemon.name} ${getStatusEffectName(type)}`);
+                            }
+                          }
+                        }
+
+                        const state = useGameStore.getState();
+                        const p = state.party[state.battle.playerActiveIndex];
+                        
+                        if (p.hp <= 0) {
+                            setTimeout(() => {
+                              actions.addBattleLog(`${p.name} fainted! You blacked out!`);
+                              setTimeout(() => {
+                                  actions.endBattle();
+                              }, 2000);
+                            }, 500);
+                        } else {
+                            actions.setTurn('PLAYER');
+                            actions.setBattleMenuState('MAIN');
+                            setCursorIdx(0);
+                        }
+                    }, 1200);
+                  }
               }
           }, 800);
           return () => clearTimeout(timer);
       }
-  }, [mode, turn, opponent, activePokemon]);
+  }, [mode, turn, opponent, activePokemon, battle.playerStatStages, battle.playerStatus, battle.opponentStatStages]);
 
   const handleSelect = (idx?: number) => {
       const actualIdx = idx !== undefined ? idx : cursorIdx;
@@ -208,45 +287,90 @@ export function BattleUI() {
       } else if (menuState === 'FIGHT') {
           const move = activePokemon.moves[actualIdx];
           if (!move) return;
-          setPlayerActionType(move.type);
+          const fullMove = getMoveDetails(move.name);
+          setPlayerActionType(fullMove.type);
 
-          const defenderTypes = opponent ? getPokemonTypes(opponent.name) : ['NORMAL'];
-          const { multiplier, description: typeDesc } = getTypeEffectiveness(move.type, defenderTypes);
-          const calculatedDamage = Math.max(1, Math.round(move.power * multiplier));
+          actions.addBattleLog(`${activePokemon.name} used ${fullMove.name}!`);
 
-          actions.addBattleLog(`${activePokemon.name} used ${move.name}!`);
-          if (typeDesc) {
-              actions.addBattleLog(typeDesc);
+          // STATUS moves: apply effects instead of damage
+          if (fullMove.category === 'STATUS') {
+            if (fullMove.effect && opponent) {
+              const { type, target, chance, stages } = fullMove.effect;
+              const actualTarget = target === 'SELF' ? 'PLAYER' : 'OPPONENT';
+              const targetName = target === 'SELF' ? activePokemon.name : opponent.name;
+
+              if (checkEffectApplied(chance)) {
+                if (type === 'ATK' || type === 'DEF' || type === 'SPD' || type === 'ACC') {
+                  const mod = type as 'ATK' | 'DEF' | 'SPD' | 'ACC';
+                  actions.applyStatMod(actualTarget, mod, stages || -1);
+                  actions.addBattleLog(`${targetName}'s ${getStageChangeDescription(mod, stages || -1)}`);
+                  // Brief visual feedback
+                  setActiveCombatEffect('heal-sparkle');
+                  setTimeout(() => setActiveCombatEffect(null), 600);
+                } else {
+                  // Status condition effect
+                  const effectType = type as any;
+                  actions.applyStatusEffect(actualTarget, effectType);
+                  actions.addBattleLog(`${targetName} ${getStatusEffectName(type)}`);
+                }
+              } else {
+                actions.addBattleLog(`But it had no effect!`);
+              }
+            }
+            actions.setTurn('OPPONENT');
+          } else {
+            // PHYSICAL / SPECIAL damage move
+            const defenderTypes = opponent ? getPokemonTypes(opponent.name) : ['NORMAL'];
+            const { multiplier, description: typeDesc } = getTypeEffectiveness(fullMove.type, defenderTypes);
+            // Apply stat stage modifiers to damage
+            const atkStages = battle.playerStatStages.atk;
+            const defStages = battle.opponentStatStages.def;
+            const atkMultiplier = atkStages >= 0 ? (2 + atkStages) / 2 : 2 / (2 - atkStages);
+            const defMultiplier = defStages >= 0 ? (2 + defStages) / 2 : 2 / (2 - defStages);
+            const calculatedDamage = Math.max(1, Math.round(fullMove.power * multiplier * (atkMultiplier / defMultiplier)));
+
+            if (typeDesc) {
+                actions.addBattleLog(typeDesc);
+            }
+            actions.setTurn('END'); // wait for damage
+
+            setTimeout(() => {
+               // Shake opponent, trigger flash of screen
+               setScreenFlash(true);
+               setOpponentDamaged(true);
+               triggerFloater(`-${calculatedDamage} HP`, false);
+               setActiveCombatEffect(fullMove.type === 'FIRE' ? 'fire-burst' : 'slash-spark');
+
+               setTimeout(() => {
+                 setScreenFlash(false);
+                 setOpponentDamaged(false);
+                 setActiveCombatEffect(null);
+               }, 500);
+
+               actions.applyDamage('OPPONENT', calculatedDamage);
+
+               // Check for move effects after damage (e.g. poison sting chance)
+               if (fullMove.effect && opponent && checkEffectApplied(fullMove.effect.chance)) {
+                 const { type, target } = fullMove.effect;
+                 if (type !== 'ATK' && type !== 'DEF' && type !== 'SPD' && type !== 'ACC') {
+                   const effectType = type as any;
+                   actions.applyStatusEffect('OPPONENT', effectType);
+                   actions.addBattleLog(`${opponent.name} ${getStatusEffectName(type)}`);
+                 }
+               }
+
+               const state = useGameStore.getState();
+               
+               if (state.battle.opponent && state.battle.opponent.hp <= 0) {
+                   setTimeout(() => {
+                     actions.addBattleLog(`Enemy ${state.battle.opponent.name} fainted!`);
+                     actions.gainVictory();
+                   }, 400);
+               } else {
+                   actions.setTurn('OPPONENT');
+               }
+            }, 1200);
           }
-          actions.setTurn('END'); // wait for damage
-
-          setTimeout(() => {
-             // Shake opponent, trigger flash of screen
-             setScreenFlash(true);
-             setOpponentDamaged(true);
-             triggerFloater(`-${calculatedDamage} HP`, false);
-             setActiveCombatEffect(move.type === 'FIRE' ? 'fire-burst' : 'slash-spark');
-
-             setTimeout(() => {
-               setScreenFlash(false);
-               setOpponentDamaged(false);
-               setActiveCombatEffect(null);
-             }, 500);
-
-             actions.applyDamage('OPPONENT', calculatedDamage);
-             const state = useGameStore.getState();
-             
-             if (state.battle.opponent && state.battle.opponent.hp <= 0) {
-                 setTimeout(() => {
-                   actions.addBattleLog(`Enemy ${state.battle.opponent.name} fainted!`);
-                   
-                   // Gaining victory level-up & evolving experience!
-                   actions.gainVictory();
-                 }, 400);
-             } else {
-                 actions.setTurn('OPPONENT');
-             }
-          }, 1200);
       }
   };
 
@@ -382,7 +506,14 @@ export function BattleUI() {
              <div className={`transition-all duration-300 transform flex bg-slate-900/90 backdrop-blur-md border-[3px] border-slate-700/80 p-4 rounded-xl shadow-2xl z-10 w-72 absolute top-6 left-6 ${opponentDamaged ? 'translate-x-2 border-red-500 scale-95' : 'translate-x-0'}`}>
                  <div className="flex-1">
                      <div className="flex items-center justify-between">
-                         <div className="font-extrabold uppercase text-transparent bg-clip-text bg-gradient-to-r from-[#ffd8a8] to-slate-100 text-lg sm:text-xl tracking-tight">{opponent.name}</div>
+                         <div className="flex items-center gap-1.5">
+                           <div className="font-extrabold uppercase text-transparent bg-clip-text bg-gradient-to-r from-[#ffd8a8] to-slate-100 text-lg sm:text-xl tracking-tight">{opponent.name}</div>
+                           {battle.opponentStatus !== 'NONE' && (
+                             <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider ${getStatusBadgeStyle(battle.opponentStatus)}`}>
+                               {battle.opponentStatus === 'POISON' ? 'PSN' : battle.opponentStatus === 'PARALYSIS' ? 'PAR' : battle.opponentStatus === 'SLEEP' ? 'SLP' : battle.opponentStatus === 'CONFUSION' ? 'CNF' : battle.opponentStatus === 'BURN' ? 'BRN' : battle.opponentStatus === 'FREEZE' ? 'FRZ' : battle.opponentStatus}
+                             </span>
+                           )}
+                         </div>
                          <div className="text-right text-[#ced4da] font-black text-xs px-2 py-0.5 rounded bg-slate-800">Lv{opponent.level}</div>
                      </div>
                      <div className="w-full bg-slate-950/70 h-3 mt-3 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
@@ -526,7 +657,14 @@ export function BattleUI() {
              <div className={`transition-all duration-300 transform flex flex-col bg-slate-900/95 backdrop-blur-md border-[3px] border-slate-700/80 p-4 rounded-xl shadow-2xl z-10 w-72 absolute bottom-6 right-6 ${playerDamaged ? 'translate-x--2 border-red-500 scale-95' : 'translate-x-0'}`}>
                  <div className="flex-1">
                      <div className="flex items-center justify-between">
-                         <div className="font-extrabold uppercase text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-indigo-100 text-lg sm:text-xl tracking-tight">{activePokemon.name}</div>
+                         <div className="flex items-center gap-1.5">
+                           <div className="font-extrabold uppercase text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-indigo-100 text-lg sm:text-xl tracking-tight">{activePokemon.name}</div>
+                           {battle.playerStatus !== 'NONE' && (
+                             <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider ${getStatusBadgeStyle(battle.playerStatus)}`}>
+                               {battle.playerStatus === 'POISON' ? 'PSN' : battle.playerStatus === 'PARALYSIS' ? 'PAR' : battle.playerStatus === 'SLEEP' ? 'SLP' : battle.playerStatus === 'CONFUSION' ? 'CNF' : battle.playerStatus === 'BURN' ? 'BRN' : battle.playerStatus === 'FREEZE' ? 'FRZ' : battle.playerStatus}
+                             </span>
+                           )}
+                         </div>
                          <div className="text-right text-[#ced4da] font-black text-xs px-2 py-0.5 rounded bg-slate-800">Lv{activePokemon.level}</div>
                      </div>
                      <div className="w-full bg-slate-950/70 h-3 mt-3 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
@@ -614,15 +752,26 @@ export function BattleUI() {
                      ]}
 
                      {menuState === 'FIGHT' && [
-                         ...activePokemon.moves.map((m, i) => (
-                             <button key={m.name} className={`flex items-center justify-between px-4 py-2 border-2 rounded-xl transition-all cursor-pointer col-span-2 ${cursorIdx === i ? 'bg-[#96f2d7] text-[#0ca678] border-[#38d9a9] shadow-lg' : 'bg-slate-800 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(i); handleSelect(i); }}>
-                                 <span className="flex items-center gap-2">
-                                     <span className="w-4 flex items-center">{cursorIdx === i ? <ChevronRight size={18} /> : ''}</span>
-                                     <span>{m.name}</span>
-                                 </span>
-                                 <span className="text-xs bg-slate-900 px-2 py-1 rounded-md text-slate-300 border border-slate-700">{m.type}</span>
-                             </button>
-                         )),
+                         ...activePokemon.moves.map((m, i) => {
+                             const fullMove = getMoveDetails(m.name);
+                             const isStatus = fullMove.category === 'STATUS';
+                             return (
+                               <button key={m.name} className={`flex items-center justify-between px-4 py-2 border-2 rounded-xl transition-all cursor-pointer col-span-2 ${cursorIdx === i ? 'bg-[#96f2d7] text-[#0ca678] border-[#38d9a9] shadow-lg' : 'bg-slate-800 border-slate-700 hover:bg-slate-800'}`} onClick={() => { setCursorIdx(i); handleSelect(i); }}>
+                                   <span className="flex items-center gap-2">
+                                       <span className="w-4 flex items-center">{cursorIdx === i ? <ChevronRight size={18} /> : ''}</span>
+                                       <span>{fullMove.name}</span>
+                                       {fullMove.power > 0 && <span className="text-[10px] text-slate-500">[{fullMove.category === 'PHYSICAL' ? '💪' : '✨'}]</span>}
+                                       {isStatus && <span className="text-[10px] text-slate-500">[🎯]</span>}
+                                   </span>
+                                   <span className="flex items-center gap-1">
+                                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isStatus ? 'bg-indigo-900/60 text-indigo-300' : 'bg-slate-900 text-slate-300'}`}>
+                                       {isStatus ? 'STATUS' : fullMove.power}
+                                     </span>
+                                     <span className="text-xs bg-slate-900 px-2 py-1 rounded-md text-slate-300 border border-slate-700">{fullMove.type}</span>
+                                   </span>
+                               </button>
+                             );
+                         }),
                          <button key="BACK_FIGHT" className="flex items-center gap-2 cursor-pointer col-span-2 text-slate-400 hover:text-white mt-1 justify-center py-1 text-sm font-bold bg-slate-900/60 rounded-lg hover:bg-slate-900 border border-slate-800 font-mono" onClick={() => { actions.setBattleMenuState('MAIN'); setCursorIdx(0); }}>
                              <span>[ RETURN TO BATTLE OPTIONS ]</span>
                          </button>

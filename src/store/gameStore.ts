@@ -6,11 +6,21 @@ import { soundManager } from '../game/soundManager';
 
 export type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
 export type GameMode = 'OVERWORLD' | 'BATTLE';
+export type MoveCategory = 'PHYSICAL' | 'SPECIAL' | 'STATUS';
+export type StatusEffect = 'NONE' | 'BURN' | 'FREEZE' | 'PARALYSIS' | 'POISON' | 'SLEEP' | 'CONFUSION';
+export type StatMod = 'ATK' | 'DEF' | 'SPD' | 'ACC';
 
 export interface Move {
   name: string;
   power: number;
   type: string;
+  category: MoveCategory;
+  effect?: {
+    type: StatusEffect | StatMod;
+    target: 'SELF' | 'OPPONENT';
+    chance: number; // 0-1 probability
+    stages?: number; // number of stat stages to raise/lower
+  };
 }
 
 export interface Pokemon {
@@ -25,12 +35,24 @@ export interface Pokemon {
   maxXp?: number;
 }
 
+export interface StatStages {
+  atk: number; // -6 to +6, default 0
+  def: number;
+  spd: number;
+  acc: number;
+}
+
 export interface BattleState {
   opponent: Pokemon | null;
   playerActiveIndex: number;
   turn: 'PLAYER' | 'OPPONENT' | 'END';
   log: string[];
   menuState: 'MAIN' | 'FIGHT' | 'ITEM' | 'VICTORY';
+  playerStatus: StatusEffect;
+  opponentStatus: StatusEffect;
+  playerStatStages: StatStages;
+  opponentStatStages: StatStages;
+  sleepTurns: number; // tracks remaining sleep turns for active battler
   victoryRewards?: {
     xpGained: number;
     goldEarned: number;
@@ -39,6 +61,16 @@ export interface BattleState {
     evolvedName: string | null;
   } | null;
 }
+
+export const DEFAULT_STAT_STAGES: StatStages = { atk: 0, def: 0, spd: 0, acc: 0 };
+
+const BATTLE_BASE = {
+  playerStatus: 'NONE' as StatusEffect,
+  opponentStatus: 'NONE' as StatusEffect,
+  playerStatStages: { atk: 0, def: 0, spd: 0, acc: 0 } as StatStages,
+  opponentStatStages: { atk: 0, def: 0, spd: 0, acc: 0 } as StatStages,
+  sleepTurns: 0,
+};
 
 export interface Quest {
   id: string;
@@ -76,15 +108,21 @@ const createInitialInventory = (): InventoryItem[] => [
 const createInitialPokedex = () => {
   const dex: Record<string, { seen: boolean; caught: boolean }> = {};
   Object.keys(POKEDEX_CATALOG).forEach((name) => {
-    dex[name] = {
-      seen: name === 'CHARMANDER',
-      caught: name === 'CHARMANDER',
-    };
+    dex[name] = { seen: false, caught: false };
   });
   return dex;
 };
 
 const createInitialQuests = (): Quest[] => [
+  {
+    id: 'starter_quest',
+    title: 'Choose Your Partner',
+    description: 'Visit Oak\'s Laboratory and choose your first partner Pokémon from the Starter Table.',
+    progress: 0,
+    maxProgress: 1,
+    completed: false,
+    category: 'EXPLORE'
+  },
   {
     id: 'town_sign',
     title: 'Orient Yourself',
@@ -116,7 +154,7 @@ const createInitialQuests = (): Quest[] => [
     id: 'pokedex_research',
     title: 'Register 3 Species',
     description: 'Scout of visual species to seen/catch at least 3 distinct types in your Dex catalog.',
-    progress: 1, // Charmander is registered seen+caught
+    progress: 0,
     maxProgress: 3,
     completed: false,
     category: 'RESEARCH'
@@ -125,7 +163,7 @@ const createInitialQuests = (): Quest[] => [
     id: 'level_up',
     title: 'Active Partner Training',
     description: 'Gain tactical combat victories in tall grass to grow your main Pokémon to Level 7.',
-    progress: 5,
+    progress: 0,
     maxProgress: 7,
     completed: false,
     category: 'TRAINING'
@@ -141,12 +179,19 @@ const createInitialQuests = (): Quest[] => [
   }
 ];
 
-const syncQuests = (quests: Quest[], party: Pokemon[], pokedex: Record<string, any>, currentPos: [number, number], readSign: boolean): Quest[] => {
+const syncQuests = (quests: Quest[], party: Pokemon[], pokedex: Record<string, any>, currentPos: [number, number], readSign: boolean, starterChosen?: boolean): Quest[] => {
   return quests.map(q => {
     if (q.completed) return q;
     const updated = { ...q };
 
-    if (updated.id === 'town_sign') {
+    if (updated.id === 'starter_quest') {
+      if (starterChosen || party.length > 0) {
+        updated.progress = 1;
+        updated.completed = true;
+      }
+    }
+    
+    else if (updated.id === 'town_sign') {
       if (readSign) {
         updated.progress = 1;
         updated.completed = true;
@@ -170,6 +215,14 @@ const syncQuests = (quests: Quest[], party: Pokemon[], pokedex: Record<string, a
       }
     } 
     
+    else if (updated.id === 'level_up') {
+      const maxLevel = party.length > 0 ? Math.max(...party.map(p => p.level)) : 0;
+      updated.progress = Math.min(updated.maxProgress, maxLevel);
+      if (updated.progress >= updated.maxProgress) {
+        updated.completed = true;
+      }
+    } 
+    
     else if (updated.id === 'pokedex_research') {
       const seenOrCaught = Object.values(pokedex).filter(d => d.seen || d.caught).length;
       updated.progress = Math.min(updated.maxProgress, seenOrCaught);
@@ -178,13 +231,7 @@ const syncQuests = (quests: Quest[], party: Pokemon[], pokedex: Record<string, a
       }
     } 
     
-    else if (updated.id === 'level_up') {
-      const maxLevel = Math.max(...party.map(p => p.level), 5);
-      updated.progress = Math.min(updated.maxProgress, maxLevel);
-      if (updated.progress >= updated.maxProgress) {
-        updated.completed = true;
-      }
-    }
+
 
     return updated;
   });
@@ -213,6 +260,9 @@ interface GameState {
   quests: Quest[];
   soundEnabled: boolean;
   bgmEnabled: boolean;
+  starterChosen: boolean;
+  showStarterModal: boolean;
+  metOak: boolean;
   readSign: boolean;
   hiddenTreasureClaimed: boolean;
 
@@ -234,6 +284,9 @@ interface GameState {
     usePotion: () => void;
     usePokeball: () => void;
     healPlayer: (amount: number) => void;
+    applyStatusEffect: (target: 'PLAYER' | 'OPPONENT', effect: StatusEffect) => void;
+    applyStatMod: (target: 'PLAYER' | 'OPPONENT', mod: StatMod, stages: number) => void;
+    resetStatStages: (target: 'PLAYER' | 'OPPONENT') => void;
     gainVictory: () => void;
     resetGame: () => void;
 
@@ -242,8 +295,7 @@ interface GameState {
     withdrawPokemon: (idx: number) => void;
     releasePokemon: (id: string, isFromParty: boolean) => void;
     healStoredPokemon: () => void;
-    swapPartyMembers: (idx: number) => void;
-
+    swapPartyMembers: (idx: number) => void;    
     toggleSound: () => void;
     toggleBgm: () => void;
     triggerReadSign: () => void;
@@ -252,6 +304,9 @@ interface GameState {
     toggleFavoriteItem: (id: string) => void;
     useOverworldItem: (id: string) => void;
     closeTownMap: () => void;
+    openStarterModal: () => void;
+    closeStarterModal: () => void;
+    chooseStarter: (name: string) => void;
   };
 }
 
@@ -259,9 +314,9 @@ export const useGameStore = create<GameState>()(
   persist(
     (set, get) => ({
       mode: 'OVERWORLD',
-      position: [5, 4],
-      targetPosition: [5, 4],
-      facing: 'DOWN',
+      position: [7, 11],
+      targetPosition: [7, 11],
+      facing: 'UP',
       isMoving: false,
       dialogue: null,
       interactedObject: null,
@@ -272,22 +327,7 @@ export const useGameStore = create<GameState>()(
       inventoryItems: createInitialInventory(),
       bicycleActive: false,
       showTownMap: false,
-      party: [
-        {
-          id: 'p1',
-          name: 'CHARMANDER',
-          level: 5,
-          hp: 20,
-          maxHp: 20,
-          color: '#ff922b',
-          xp: 0,
-          maxXp: 130,
-          moves: [
-            { name: 'SCRATCH', power: 4, type: 'NORMAL' },
-            { name: 'EMBER', power: 6, type: 'FIRE' }
-          ]
-        }
-      ],
+      party: [],
       pcBox: [
         {
           id: 'pc1',
@@ -299,9 +339,9 @@ export const useGameStore = create<GameState>()(
           xp: 20,
           maxXp: 110,
           moves: [
-            { name: 'TACKLE', power: 3, type: 'NORMAL' },
-            { name: 'GUST', power: 4, type: 'FLYING' }
-          ]
+            { name: 'TACKLE', power: 3, type: 'NORMAL', category: 'PHYSICAL' },
+            { name: 'GUST', power: 4, type: 'FLYING', category: 'SPECIAL' }
+          ] as Move[]
         },
         {
           id: 'pc2',
@@ -313,25 +353,28 @@ export const useGameStore = create<GameState>()(
           xp: 15,
           maxXp: 90,
           moves: [
-            { name: 'TACKLE', power: 3, type: 'NORMAL' },
-            { name: 'QUICK ATTACK', power: 4, type: 'NORMAL' }
-          ]
+            { name: 'TACKLE', power: 3, type: 'NORMAL', category: 'PHYSICAL' },
+            { name: 'QUICK ATTACK', power: 4, type: 'NORMAL', category: 'PHYSICAL' }
+          ] as Move[]
         }
       ],
-      pokedex: createInitialPokedex(),
-      battle: {
-        opponent: null,
-        playerActiveIndex: 0,
-        turn: 'PLAYER',
-        log: [],
-        menuState: 'MAIN'
-      },
+      pokedex: createInitialPokedex(),        battle: {
+          ...BATTLE_BASE,
+          opponent: null,
+          playerActiveIndex: 0,
+          turn: 'PLAYER',
+          log: [],
+          menuState: 'MAIN',
+        },
 
       quests: createInitialQuests(),
       soundEnabled: true,
       bgmEnabled: true,
       readSign: false,
       hiddenTreasureClaimed: false,
+      starterChosen: false,
+      showStarterModal: false,
+      metOak: false,
 
       actions: {
         startMove: (dir, newPos) =>
@@ -371,10 +414,11 @@ export const useGameStore = create<GameState>()(
                   mode: 'BATTLE',
                   pokedex: nextPokedex,
                   battle: {
+                    ...BATTLE_BASE,
                     opponent: wildOpponent,
                     playerActiveIndex: 0,
                     turn: 'PLAYER',
-                    log: [`A wild ${wildOpponent.name} appeared! Go, ${state.party[0].name}!`],
+                    log: [`A wild ${wildOpponent.name} appeared!${state.party[0] ? ` Go, ${state.party[0].name}!` : ''}`],
                     menuState: 'MAIN'
                   }
                 };
@@ -384,14 +428,24 @@ export const useGameStore = create<GameState>()(
               }
             }
 
+            // Check if player just entered Oak's Lab for the first time
+            const xCoord = nextPos[0];
+            const zCoord = nextPos[1];
+            const insideLab = xCoord >= 5 && xCoord <= 9 && zCoord >= 8 && zCoord <= 10;
+            const oakIntroShown = insideLab && !state.metOak && !state.starterChosen && state.party.length === 0;
+
             // Synchronize Quests logic
             const partyToUse = finalState.party ?? state.party;
             const pokedexToUse = finalState.pokedex ?? state.pokedex;
-            const updatedQuests = syncQuests(state.quests, partyToUse, pokedexToUse, nextPos, state.readSign);
-            
+            const updatedQuests = syncQuests(state.quests, partyToUse, pokedexToUse, nextPos, state.readSign, state.starterChosen);
+
             return {
               ...finalState,
-              quests: updatedQuests
+              quests: updatedQuests,
+              ...(oakIntroShown ? {
+                dialogue: "PROFESSOR OAK: 'Ah, Red! Perfect timing, my boy! I've been expecting you. Step right up — what I have here is the choice of a lifetime!'",
+                metOak: true as const,
+              } : {})
             };
           });
         },
@@ -421,13 +475,14 @@ export const useGameStore = create<GameState>()(
               soundManager.syncBGMWithState();
             }, 60);
 
-            const updatedQuests = syncQuests(state.quests, state.party, nextPokedex, state.position, state.readSign);
+            const updatedQuests = syncQuests(state.quests, state.party, nextPokedex, state.position, state.readSign, state.starterChosen);
 
             return {
               mode: 'BATTLE',
               pokedex: nextPokedex,
               quests: updatedQuests,
               battle: {
+                ...BATTLE_BASE,
                 opponent,
                 playerActiveIndex: 0,
                 turn: 'PLAYER',
@@ -441,7 +496,7 @@ export const useGameStore = create<GameState>()(
         endBattle: () => set((state) => {
             const party = [...state.party];
             // Safe fallback heals to let players continue
-            if (party[0].hp <= 0) {
+            if (party[0] && party[0].hp <= 0) {
               party[0].hp = Math.floor(party[0].maxHp * 0.5);
             }
             
@@ -450,7 +505,7 @@ export const useGameStore = create<GameState>()(
               soundManager.syncBGMWithState();
             }, 60);
 
-            const updatedQuests = syncQuests(state.quests, party, state.pokedex, state.position, state.readSign);
+            const updatedQuests = syncQuests(state.quests, party, state.pokedex, state.position, state.readSign, state.starterChosen);
 
             return { 
               mode: 'OVERWORLD', 
@@ -496,6 +551,41 @@ export const useGameStore = create<GameState>()(
             const active = party[state.battle.playerActiveIndex];
             active.hp = Math.min(active.maxHp, active.hp + amount);
             return { party };
+        }),
+
+        applyStatusEffect: (target, effect) => set((state) => {
+          if (target === 'PLAYER') {
+            return { battle: { ...state.battle, playerStatus: effect } };
+          } else {
+            return { battle: { ...state.battle, opponentStatus: effect } };
+          }
+        }),
+
+        applyStatMod: (target, mod, stages) => set((state) => {
+          const clamp = (v: number) => Math.max(-6, Math.min(6, v));
+          if (target === 'PLAYER') {
+            const newStages = { ...state.battle.playerStatStages };
+            if (mod === 'ATK') newStages.atk = clamp(newStages.atk + stages);
+            if (mod === 'DEF') newStages.def = clamp(newStages.def + stages);
+            if (mod === 'SPD') newStages.spd = clamp(newStages.spd + stages);
+            if (mod === 'ACC') newStages.acc = clamp(newStages.acc + stages);
+            return { battle: { ...state.battle, playerStatStages: newStages } };
+          } else {
+            const newStages = { ...state.battle.opponentStatStages };
+            if (mod === 'ATK') newStages.atk = clamp(newStages.atk + stages);
+            if (mod === 'DEF') newStages.def = clamp(newStages.def + stages);
+            if (mod === 'SPD') newStages.spd = clamp(newStages.spd + stages);
+            if (mod === 'ACC') newStages.acc = clamp(newStages.acc + stages);
+            return { battle: { ...state.battle, opponentStatStages: newStages } };
+          }
+        }),
+
+        resetStatStages: (target) => set((state) => {
+          if (target === 'PLAYER') {
+            return { battle: { ...state.battle, playerStatStages: { ...DEFAULT_STAT_STAGES } } };
+          } else {
+            return { battle: { ...state.battle, opponentStatStages: { ...DEFAULT_STAT_STAGES } } };
+          }
         }),
 
         usePotion: () => set((state) => {
@@ -552,7 +642,7 @@ export const useGameStore = create<GameState>()(
             soundManager.playSFX('capture_fail');
           }
 
-          const updatedQuests = syncQuests(state.quests, nextParty, nextPokedex, state.position, state.readSign);
+          const updatedQuests = syncQuests(state.quests, nextParty, nextPokedex, state.position, state.readSign, state.starterChosen);
 
           return {
             pokeballs: nextPokeballs,
@@ -624,7 +714,7 @@ export const useGameStore = create<GameState>()(
                 active.color = evoCatalog.color;
                 active.maxHp = evoCatalog.baseHp + (nextLevel * 2);
                 active.hp = active.maxHp; // full recovery upon evolution!
-                active.moves = evoCatalog.moves.map(m => ({ ...m }));
+                active.moves = evoCatalog.moves.map(m => ({ ...m, category: 'PHYSICAL' as const })) as Move[];
                 active.xp = 0; // reset XP on evolution to keep balance
                 active.maxXp = nextLevel * 20 + 30;
 
@@ -636,7 +726,7 @@ export const useGameStore = create<GameState>()(
             }
           }
 
-          const updatedQuests = syncQuests(state.quests, nextParty, nextPokedex, state.position, state.readSign);
+          const updatedQuests = syncQuests(state.quests, nextParty, nextPokedex, state.position, state.readSign, state.starterChosen);
 
           return {
             party: nextParty,
@@ -662,9 +752,9 @@ export const useGameStore = create<GameState>()(
           localStorage.removeItem('pokemon-3d-save');
           set({
             mode: 'OVERWORLD',
-            position: [5, 4],
-            targetPosition: [5, 4],
-            facing: 'DOWN',
+            position: [7, 11],
+            targetPosition: [7, 11],
+            facing: 'UP',
             isMoving: false,
             dialogue: null,
             interactedObject: null,
@@ -674,29 +764,18 @@ export const useGameStore = create<GameState>()(
             inventoryItems: createInitialInventory(),
             bicycleActive: false,
             showTownMap: false,
-            party: [
-              {
-                id: 'p1',
-                name: 'CHARMANDER',
-                level: 5,
-                hp: 20,
-                maxHp: 20,
-                color: '#ff922b',
-                xp: 0,
-                maxXp: 130,
-                moves: [
-                  { name: 'SCRATCH', power: 4, type: 'NORMAL' },
-                  { name: 'EMBER', power: 6, type: 'FIRE' }
-                ]
-              }
-            ],
+            party: [],
             pokedex: createInitialPokedex(),
-            quests: createInitialQuests(),
-            soundEnabled: true,
+      quests: createInitialQuests(),
+      soundEnabled: true,
             bgmEnabled: true,
             readSign: false,
             hiddenTreasureClaimed: false,
+            starterChosen: false,
+            showStarterModal: false,
+            metOak: false,
             battle: {
+              ...BATTLE_BASE,
               opponent: null,
               playerActiveIndex: 0,
               turn: 'PLAYER',
@@ -715,9 +794,9 @@ export const useGameStore = create<GameState>()(
                 xp: 20,
                 maxXp: 110,
                 moves: [
-                  { name: 'TACKLE', power: 3, type: 'NORMAL' },
-                  { name: 'GUST', power: 4, type: 'FLYING' }
-                ]
+                  { name: 'TACKLE', power: 3, type: 'NORMAL', category: 'PHYSICAL' },
+                  { name: 'GUST', power: 4, type: 'FLYING', category: 'SPECIAL' }
+                ] as Move[]
               },
               {
                 id: 'pc2',
@@ -729,9 +808,9 @@ export const useGameStore = create<GameState>()(
                 xp: 15,
                 maxXp: 90,
                 moves: [
-                  { name: 'TACKLE', power: 3, type: 'NORMAL' },
-                  { name: 'QUICK ATTACK', power: 4, type: 'NORMAL' }
-                ]
+                  { name: 'TACKLE', power: 3, type: 'NORMAL', category: 'PHYSICAL' },
+                  { name: 'QUICK ATTACK', power: 4, type: 'NORMAL', category: 'PHYSICAL' }
+                ] as Move[]
               }
             ]
           });
@@ -873,7 +952,7 @@ export const useGameStore = create<GameState>()(
 
         triggerReadSign: () => {
           set((state) => {
-            const updatedQuests = syncQuests(state.quests, state.party, state.pokedex, state.position, true);
+            const updatedQuests = syncQuests(state.quests, state.party, state.pokedex, state.position, true, state.starterChosen);
             return {
               readSign: true,
               quests: updatedQuests
@@ -946,13 +1025,19 @@ export const useGameStore = create<GameState>()(
 
             const activePokemon = state.party[0];
 
+            // Guard: no party member yet
+            if (!activePokemon && (item.category === 'RECOVERY' || item.category === 'STATUS_HEAL')) {
+              return { dialogue: `You don't have a Pokémon partner yet! Visit Oak's Lab to choose your first partner.` };
+            }
+
             // 1. RECOVERY ITEMS
             if (item.category === 'RECOVERY' && item.effectPower) {
-              if (activePokemon.hp >= activePokemon.maxHp) {
+              if (activePokemon && activePokemon.hp >= activePokemon.maxHp) {
                 return { dialogue: `${activePokemon.name} is already at full health!` };
               }
               soundManager.playSFX('heal');
               const nextParty = [...state.party];
+              if (!nextParty[0]) return state;
               nextParty[0] = {
                 ...activePokemon,
                 hp: Math.min(activePokemon.maxHp, activePokemon.hp + item.effectPower),
@@ -1015,6 +1100,92 @@ export const useGameStore = create<GameState>()(
         closeTownMap: () => {
           soundManager.playSFX('click');
           set({ showTownMap: false });
+        },
+
+        openStarterModal: () => {
+          soundManager.playSFX('click');
+          set({ showStarterModal: true });
+        },
+
+        closeStarterModal: () => {
+          soundManager.playSFX('click');
+          set({ showStarterModal: false });
+        },
+
+
+
+        chooseStarter: (name) => {
+          set((state) => {
+            let starter: Pokemon;
+            
+            if (name === 'BULBASAUR') {
+              starter = {
+                id: 'p1',
+                name: 'BULBASAUR',
+                level: 5,
+                hp: 20,
+                maxHp: 20,
+                color: '#38d9a9',
+                xp: 0,
+                maxXp: 130,
+                moves: [
+                  { name: 'TACKLE', power: 4, type: 'NORMAL', category: 'PHYSICAL' },
+                  { name: 'VINE WHIP', power: 6, type: 'GRASS', category: 'PHYSICAL' }
+                ] as Move[]
+              };
+            } else if (name === 'CHARMANDER') {
+              starter = {
+                id: 'p1',
+                name: 'CHARMANDER',
+                level: 5,
+                hp: 20,
+                maxHp: 20,
+                color: '#ff922b',
+                xp: 0,
+                maxXp: 130,
+                moves: [
+                  { name: 'SCRATCH', power: 4, type: 'NORMAL', category: 'PHYSICAL' },
+                  { name: 'EMBER', power: 6, type: 'FIRE', category: 'SPECIAL' }
+                ] as Move[]
+              };
+            } else { // SQUIRTLE
+              starter = {
+                id: 'p1',
+                name: 'SQUIRTLE',
+                level: 5,
+                hp: 22,
+                maxHp: 22,
+                color: '#4dabf7',
+                xp: 0,
+                maxXp: 130,
+                moves: [
+                  { name: 'TACKLE', power: 4, type: 'NORMAL', category: 'PHYSICAL' },
+                  { name: 'WATER GUN', power: 6, type: 'WATER', category: 'SPECIAL' }
+                ] as Move[]
+              };
+            }
+
+            const nextPokedex = { ...state.pokedex };
+            nextPokedex[name] = { seen: true, caught: true };
+
+            const updatedQuests = state.quests.map(q => {
+              if (q.id === 'starter_quest') {
+                return { ...q, progress: 1, completed: true };
+              }
+              return q;
+            });
+
+            soundManager.playSFX('level_up');
+
+            return {
+              starterChosen: true,
+              showStarterModal: false,
+              party: [starter],
+              pokedex: nextPokedex,
+              quests: updatedQuests,
+              dialogue: `PROFESSOR OAK: 'Excellent choice, Red! This ${name} is a fine partner! Now, be on your way — there's a whole world of Pokémon to discover! Take these Poké Balls and start your journey!'`
+            };
+          });
         }
       }
     }),
@@ -1036,8 +1207,10 @@ export const useGameStore = create<GameState>()(
         quests: state.quests,
         soundEnabled: state.soundEnabled,
         bgmEnabled: state.bgmEnabled,
+        metOak: state.metOak,
         readSign: state.readSign,
-        hiddenTreasureClaimed: state.hiddenTreasureClaimed
+        hiddenTreasureClaimed: state.hiddenTreasureClaimed,
+        starterChosen: state.starterChosen
       })
     }
   )

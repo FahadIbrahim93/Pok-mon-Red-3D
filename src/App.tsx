@@ -8,6 +8,7 @@ import { Minimap } from './components/ui/Minimap';
 import { QuestLog } from './components/ui/QuestLog';
 import { InventoryModal } from './components/ui/InventoryModal';
 import { PcBoxModal } from './components/ui/PcBoxModal';
+import { StarterSelection } from './components/ui/StarterSelection';
 import { GameMenuController } from './components/ui/GameMenuController';
 import { soundManager } from './game/soundManager';
 
@@ -38,6 +39,7 @@ export default function App() {
       <QuestLog />
       <InventoryModal />
       <PcBoxModal />
+      <StarterSelection />
       <GameMenuController />
     </div>
   );
