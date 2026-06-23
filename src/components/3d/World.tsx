@@ -91,6 +91,11 @@ export function World() {
   const [oakPacingState, setOakPacingState] = useState<'IDLE' | 'WALK'>('IDLE');
   const [rivalHeading, setRivalHeading] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT'>('LEFT');
   const [rivalPacingState, setRivalPacingState] = useState<'IDLE' | 'WALK'>('IDLE');
+  // Route 1 wandering trainer NPCs
+  const [bcHeading, setBcHeading] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT'>('RIGHT');
+  const [bcPacingState, setBcPacingState] = useState<'IDLE' | 'WALK'>('IDLE');
+  const [ysHeading, setYsHeading] = useState<'UP' | 'DOWN' | 'LEFT' | 'RIGHT'>('DOWN');
+  const [ysPacingState, setYsPacingState] = useState<'IDLE' | 'WALK'>('IDLE');
 
   // Multi-tier 3D particle registers to simulate high-fidelity rustling in grass patches
   const playerPosLocal = useRef<THREE.Vector3>(new THREE.Vector3(5, 0, 4));
@@ -124,6 +129,9 @@ export function World() {
   const charmanderGroupRef = useRef<Group>(null);
   const oakGroupRef = useRef<Group>(null);
   const rivalGroupRef = useRef<Group>(null);
+  // Route 1 wandering trainer NPC refs
+  const bugCatcherGroupRef = useRef<Group>(null);
+  const youngsterGroupRef = useRef<Group>(null);
 
   // High fidelity wind / satellite / streetlight references
   const rivalTurbineRef = useRef<Group>(null);
@@ -139,29 +147,81 @@ export function World() {
       { x: 9.2, z: 4.8 },
       { x: 4.8, z: 11.2 },
       { x: 9.2, z: 11.2 },
+      // Viridian City streetlamps
+      { x: 2.5, z: 36.8 },
+      { x: 7.0, z: 36.8 },
+      { x: 11.5, z: 36.8 },
+      { x: 5.0, z: 43.8 },
+      { x: 9.0, z: 43.8 },
     ];
   }, []);
 
-  // Soft low-poly clouds drifting slowly across the sky
+  // Soft low-poly clouds drifting slowly across the extended Kanto sky
   const clouds = useMemo(() => {
     return [
       { y: 7.2, x: -3, z: 2.5, scale: 1.1, speed: 0.14 },
       { y: 8.8, x: 7, z: 4.5, scale: 0.85, speed: 0.09 },
       { y: 7.6, x: 2, z: 12.0, scale: 1.3, speed: 0.16 },
       { y: 9.2, x: 14, z: 8.5, scale: 0.95, speed: 0.11 },
+      { y: 8.0, x: -4, z: 18.0, scale: 1.0, speed: 0.12 },
+      { y: 9.5, x: 16, z: 22.0, scale: 1.2, speed: 0.10 },
+      { y: 7.8, x: -2, z: 28.0, scale: 0.9, speed: 0.13 },
+      { y: 8.6, x: 12, z: 32.0, scale: 1.15, speed: 0.08 },
+      // Viridian City clouds
+      { y: 8.5, x: 3, z: 36.0, scale: 1.0, speed: 0.11 },
+      { y: 9.0, x: 8, z: 40.0, scale: 1.3, speed: 0.09 },
+      { y: 7.4, x: -1, z: 44.0, scale: 0.95, speed: 0.14 },
+      { y: 8.2, x: 14, z: 48.0, scale: 1.1, speed: 0.10 },
     ];
   }, []);
 
-  // Dynamic Route 1 high-fidelity tall grass patches (at the top rows)
+  // Dynamic Route 1 & Viridian Forest tall grass patches covering all zones
   const route1GrassPatches = useMemo(() => {
     const patches: { x: number; z: number; phase: number; scale: number }[] = [];
-    // original Route 1 grass patches on north side of Town
-    const coords = [
+    // Original Route 1 grass patches on north side of Town
+    const northCoords = [
       { x: 2, z: 1 }, { x: 3, z: 1 }, { x: 4, z: 1 }, { x: 5, z: 1 },
       { x: 9, z: 1 }, { x: 10, z: 1 }, { x: 11, z: 1 }, { x: 12, z: 1 },
       { x: 3, z: 0 }, { x: 4, z: 0 }, { x: 10, z: 0 }, { x: 11, z: 0 }
     ];
-    coords.forEach((coord) => {
+    // Route 1 south patches (rows 15-24)
+    const route1Coords = [
+      { x: 1, z: 15 }, { x: 2, z: 15 }, { x: 3, z: 15 }, { x: 12, z: 15 }, { x: 13, z: 15 },
+      { x: 1, z: 16 }, { x: 2, z: 16 }, { x: 12, z: 16 }, { x: 13, z: 16 },
+      { x: 1, z: 17 }, { x: 2, z: 17 }, { x: 12, z: 17 }, { x: 13, z: 17 },
+      { x: 1, z: 18 }, { x: 13, z: 18 },
+      { x: 1, z: 19 }, { x: 13, z: 19 },
+      { x: 5, z: 21 }, { x: 9, z: 21 },
+      { x: 5, z: 22 }, { x: 9, z: 22 },
+      { x: 1, z: 23 }, { x: 13, z: 23 },
+    ];
+    // Viridian Forest interior patches (rows 25-34)
+    const forestCoords = [
+      { x: 1, z: 25 }, { x: 13, z: 25 },
+      { x: 1, z: 26 }, { x: 13, z: 26 },
+      { x: 1, z: 27 }, { x: 2, z: 27 }, { x: 12, z: 27 }, { x: 13, z: 27 },
+      { x: 1, z: 28 }, { x: 13, z: 28 },
+      { x: 1, z: 29 }, { x: 13, z: 29 },
+      { x: 1, z: 30 }, { x: 13, z: 30 },
+      { x: 5, z: 31 }, { x: 9, z: 31 },
+      { x: 1, z: 32 }, { x: 2, z: 32 }, { x: 12, z: 32 }, { x: 13, z: 32 },
+      { x: 1, z: 33 }, { x: 13, z: 33 },
+      { x: 5, z: 34 }, { x: 9, z: 34 },
+    ];
+    // Viridian City grass patches (rows 35-49)
+    const cityCoords = [
+      { x: 1, z: 36 }, { x: 13, z: 36 },
+      { x: 1, z: 37 }, { x: 13, z: 37 },
+      { x: 3, z: 39 }, { x: 11, z: 39 },
+      { x: 3, z: 40 }, { x: 11, z: 40 },
+      { x: 1, z: 44 }, { x: 13, z: 44 },
+      { x: 1, z: 45 }, { x: 13, z: 45 },
+      { x: 1, z: 46 }, { x: 13, z: 46 },
+      { x: 1, z: 47 }, { x: 2, z: 47 }, { x: 12, z: 47 }, { x: 13, z: 47 },
+      { x: 5, z: 48 }, { x: 9, z: 48 },
+    ];
+    const allCoords = [...northCoords, ...route1Coords, ...forestCoords, ...cityCoords];
+    allCoords.forEach((coord) => {
       patches.push({
         x: coord.x,
         z: coord.z,
@@ -505,6 +565,70 @@ export function World() {
     }
     if (rivalHeading !== nextGaryHeading) setRivalHeading(nextGaryHeading);
     if (rivalPacingState !== nextGaryState) setRivalPacingState(nextGaryState);
+
+    // Bug Catcher pacing LEFT-RIGHT on Route 1 (11, 18) — 5s cycle
+    const bcCycle = Math.floor(time + 1.2) % 8;
+    let nextBcHeading: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' = 'RIGHT';
+    let nextBcState: 'IDLE' | 'WALK' = 'IDLE';
+    let nextBcX = 11;
+
+    if (bcCycle < 3) {
+      const t = ((time + 1.2) % 8) / 3;
+      nextBcX = 11.0 - 0.4 * t;
+      nextBcHeading = 'LEFT';
+      nextBcState = 'WALK';
+    } else if (bcCycle < 4) {
+      nextBcX = 10.6;
+      nextBcHeading = 'LEFT';
+      nextBcState = 'IDLE';
+    } else if (bcCycle < 7) {
+      const t = (((time + 1.2) % 8) - 4) / 3;
+      nextBcX = 10.6 + 0.4 * t;
+      nextBcHeading = 'RIGHT';
+      nextBcState = 'WALK';
+    } else {
+      nextBcX = 11.0;
+      nextBcHeading = 'RIGHT';
+      nextBcState = 'IDLE';
+    }
+
+    if (bugCatcherGroupRef.current) {
+      bugCatcherGroupRef.current.position.x = nextBcX;
+    }
+    if (bcHeading !== nextBcHeading) setBcHeading(nextBcHeading);
+    if (bcPacingState !== nextBcState) setBcPacingState(nextBcState);
+
+    // Youngster pacing UP-DOWN on Route 1 (4, 22) — 6s cycle
+    const ysCycle = Math.floor(time + 2.8) % 10;
+    let nextYsHeading: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' = 'DOWN';
+    let nextYsState: 'IDLE' | 'WALK' = 'IDLE';
+    let nextYsZ = 22;
+
+    if (ysCycle < 3.5) {
+      const t = ((time + 2.8) % 10) / 3.5;
+      nextYsZ = 22.0 - 0.35 * t;
+      nextYsHeading = 'UP';
+      nextYsState = 'WALK';
+    } else if (ysCycle < 5) {
+      nextYsZ = 21.65;
+      nextYsHeading = 'UP';
+      nextYsState = 'IDLE';
+    } else if (ysCycle < 8.5) {
+      const t = (((time + 2.8) % 10) - 5) / 3.5;
+      nextYsZ = 21.65 + 0.7 * t;
+      nextYsHeading = 'DOWN';
+      nextYsState = 'WALK';
+    } else {
+      nextYsZ = 22.35;
+      nextYsHeading = 'DOWN';
+      nextYsState = 'IDLE';
+    }
+
+    if (youngsterGroupRef.current) {
+      youngsterGroupRef.current.position.z = nextYsZ;
+    }
+    if (ysHeading !== nextYsHeading) setYsHeading(nextYsHeading);
+    if (ysPacingState !== nextYsState) setYsPacingState(nextYsState);
 
     // 11. High-fidelity dynamic Player 3D sync and 3D grass patch walk rustle particles
     const targetVec = new THREE.Vector3(targetPosition[0], 0, targetPosition[1]);
@@ -1121,6 +1245,264 @@ export function World() {
           );
         }
 
+        // ===== VIRIDIAN CITY POKÉMON CENTER (x=2-3, z=37-38) =====
+        if (x === 2 && z === 37) {
+          return (
+            <group key="viridian-center" position={[2, 0, 37.5]}>
+              {/* Foundation — covers rows 37-38 only */}
+              <mesh position={[0, 0.1, 0]} receiveShadow>
+                <boxGeometry args={[3.2, 0.2, 2.2]} />
+                <meshStandardMaterial color="#495057" roughness={0.9} />
+              </mesh>
+              {/* White walls */}
+              <mesh position={[0, 1.2, 0]} castShadow receiveShadow>
+                <boxGeometry args={[3.0, 2.2, 2.0]} />
+                <meshStandardMaterial color="#f8f9fa" roughness={0.6} />
+              </mesh>
+              {/* Red roof stripe */}
+              <mesh position={[0, 2.35, 0]} castShadow>
+                <boxGeometry args={[3.2, 0.15, 2.2]} />
+                <meshStandardMaterial color="#e03131" roughness={0.5} />
+              </mesh>
+              {/* Flat roof top */}
+              <mesh position={[0, 2.5, 0]} castShadow receiveShadow>
+                <boxGeometry args={[3.0, 0.12, 2.0]} />
+                <meshStandardMaterial color="#dee2e6" roughness={0.4} />
+              </mesh>
+              {/* Poké Ball symbol on roof */}
+              <mesh position={[0, 2.56, 0]}>
+                <sphereGeometry args={[0.12, 8, 8]} />
+                <meshStandardMaterial color="#e03131" roughness={0.3} />
+              </mesh>
+              <mesh position={[0, 2.56, 0]}>
+                <sphereGeometry args={[0.06, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                <meshStandardMaterial color="#f8f9fa" roughness={0.3} />
+              </mesh>
+              {/* Front door on south face — faces the PATH tiles at z=39 */}
+              <mesh position={[0, 0.6, 1.01]} castShadow>
+                <boxGeometry args={[0.6, 1.2, 0.05]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.5} roughness={0.1} metalness={0.5} />
+              </mesh>
+              <mesh position={[0, 0.6, 1.01]}>
+                <boxGeometry args={[0.65, 1.25, 0.03]} />
+                <meshStandardMaterial color="#343a40" />
+              </mesh>
+              {/* Center sign above door */}
+              <mesh position={[0, 1.9, 1.01]}>
+                <boxGeometry args={[1.0, 0.3, 0.06]} />
+                <meshStandardMaterial color="#e03131" roughness={0.5} />
+              </mesh>
+              <mesh position={[0, 1.9, 1.03]}>
+                <boxGeometry args={[0.9, 0.22, 0.02]} />
+                <meshStandardMaterial color="#f8f9fa" />
+              </mesh>
+              {/* Side windows */}
+              <mesh position={[-0.8, 1.2, 1.01]}>
+                <boxGeometry args={[0.45, 0.45, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.6} roughness={0.1} />
+              </mesh>
+              <mesh position={[0.8, 1.2, 1.01]}>
+                <boxGeometry args={[0.45, 0.45, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.6} roughness={0.1} />
+              </mesh>
+              {/* North windows */}
+              <mesh position={[-0.8, 1.2, -1.01]}>
+                <boxGeometry args={[0.45, 0.45, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.6} roughness={0.1} />
+              </mesh>
+              <mesh position={[0.8, 1.2, -1.01]}>
+                <boxGeometry args={[0.45, 0.45, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.6} roughness={0.1} />
+              </mesh>
+              {/* Entrance ramp */}
+              <mesh position={[0, 0.04, 1.35]} receiveShadow>
+                <boxGeometry args={[0.8, 0.08, 0.5]} />
+                <meshStandardMaterial color="#868e96" roughness={0.8} />
+              </mesh>
+              {/* Nurse Joy's healing machine */}
+              <mesh position={[-0.5, 0.4, -0.95]}>
+                <boxGeometry args={[0.3, 0.3, 0.05]} />
+                <meshStandardMaterial color="#40c057" emissive="#40c057" emissiveIntensity={0.5} />
+              </mesh>
+            </group>
+          );
+        }
+        if (x >= 2 && x <= 3 && z >= 37 && z <= 38) return null;
+
+        // ===== VIRIDIAN CITY POKÉ MART (x=12-13, z=37-38) =====
+        if (x === 12 && z === 37) {
+          return (
+            <group key="viridian-mart" position={[12, 0, 37.5]}>
+              {/* Foundation */}
+              <mesh position={[0, 0.1, 0]} receiveShadow>
+                <boxGeometry args={[3.2, 0.2, 2.2]} />
+                <meshStandardMaterial color="#495057" roughness={0.9} />
+              </mesh>
+              {/* Blue walls */}
+              <mesh position={[0, 1.2, 0]} castShadow receiveShadow>
+                <boxGeometry args={[3.0, 2.2, 2.0]} />
+                <meshStandardMaterial color="#e7f5ff" roughness={0.6} />
+              </mesh>
+              {/* Blue roof stripe */}
+              <mesh position={[0, 2.35, 0]} castShadow>
+                <boxGeometry args={[3.2, 0.15, 2.2]} />
+                <meshStandardMaterial color="#1c7ed6" roughness={0.5} />
+              </mesh>
+              {/* Flat roof top */}
+              <mesh position={[0, 2.5, 0]} castShadow receiveShadow>
+                <boxGeometry args={[3.0, 0.12, 2.0]} />
+                <meshStandardMaterial color="#dee2e6" roughness={0.4} />
+              </mesh>
+              {/* Front door on south face */}
+              <mesh position={[0, 0.6, 1.01]} castShadow>
+                <boxGeometry args={[0.6, 1.2, 0.05]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.5} roughness={0.1} metalness={0.5} />
+              </mesh>
+              <mesh position={[0, 0.6, 1.01]}>
+                <boxGeometry args={[0.65, 1.25, 0.03]} />
+                <meshStandardMaterial color="#343a40" />
+              </mesh>
+              {/* MART sign above door */}
+              <mesh position={[0, 1.9, 1.01]}>
+                <boxGeometry args={[1.0, 0.3, 0.06]} />
+                <meshStandardMaterial color="#1c7ed6" roughness={0.5} />
+              </mesh>
+              <mesh position={[0, 1.9, 1.03]}>
+                <boxGeometry args={[0.9, 0.22, 0.02]} />
+                <meshStandardMaterial color="#f8f9fa" />
+              </mesh>
+              {/* Windows */}
+              <mesh position={[-0.8, 1.2, 1.01]}>
+                <boxGeometry args={[0.45, 0.45, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.6} roughness={0.1} />
+              </mesh>
+              <mesh position={[0.8, 1.2, 1.01]}>
+                <boxGeometry args={[0.45, 0.45, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.6} roughness={0.1} />
+              </mesh>
+              <mesh position={[-0.8, 1.2, -1.01]}>
+                <boxGeometry args={[0.45, 0.45, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.6} roughness={0.1} />
+              </mesh>
+              <mesh position={[0.8, 1.2, -1.01]}>
+                <boxGeometry args={[0.45, 0.45, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.6} roughness={0.1} />
+              </mesh>
+              {/* Awning above door */}
+              <mesh position={[0, 1.55, 1.01]}>
+                <boxGeometry args={[1.6, 0.06, 0.3]} />
+                <meshStandardMaterial color="#1c7ed6" roughness={0.5} />
+              </mesh>
+              {/* Entrance ramp */}
+              <mesh position={[0, 0.04, 1.35]} receiveShadow>
+                <boxGeometry args={[0.8, 0.08, 0.5]} />
+                <meshStandardMaterial color="#868e96" roughness={0.8} />
+              </mesh>
+              {/* Display shelves inside */}
+              <mesh position={[0.6, 0.3, -0.95]}>
+                <boxGeometry args={[0.4, 0.6, 0.1]} />
+                <meshStandardMaterial color="#adb5bd" roughness={0.6} />
+              </mesh>
+              <mesh position={[-0.6, 0.3, -0.95]}>
+                <boxGeometry args={[0.4, 0.6, 0.1]} />
+                <meshStandardMaterial color="#adb5bd" roughness={0.6} />
+              </mesh>
+            </group>
+          );
+        }
+        if (x >= 11 && x <= 12 && z >= 37 && z <= 38) return null;
+
+        // ===== VIRIDIAN GYM (x=4-10, z=41-42) =====
+        if (x === 7 && z === 41) {
+          return (
+            <group key="viridian-gym" position={[7, 0, 41.5]}>
+              {/* Large stone foundation — covers rows 41-42 */}
+              <mesh position={[0, 0.15, 0]} receiveShadow>
+                <boxGeometry args={[7.2, 0.3, 2.2]} />
+                <meshStandardMaterial color="#495057" roughness={0.9} />
+              </mesh>
+              {/* Sandstone walls */}
+              <mesh position={[0, 1.5, 0]} castShadow receiveShadow>
+                <boxGeometry args={[7.0, 2.8, 2.0]} />
+                <meshStandardMaterial color="#e9ecef" roughness={0.7} />
+              </mesh>
+              {/* Green domed roof */}
+              <mesh position={[0, 3.2, 0]} castShadow receiveShadow>
+                <boxGeometry args={[7.4, 0.4, 2.4]} />
+                <meshStandardMaterial color="#099268" roughness={0.5} />
+              </mesh>
+              {/* Dome center */}
+              <mesh position={[0, 3.6, 0]} castShadow>
+                <sphereGeometry args={[1.2, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2.5]} />
+                <meshStandardMaterial color="#2f9e44" roughness={0.6} flatShading />
+              </mesh>
+              {/* Gold Gym symbol on dome */}
+              <mesh position={[0, 3.6, 0.2]}>
+                <torusGeometry args={[0.2, 0.04, 6, 12]} />
+                <meshStandardMaterial color="#fab005" metalness={0.8} roughness={0.2} />
+              </mesh>
+              <mesh position={[0, 3.6, 0.2]}>
+                <sphereGeometry args={[0.06, 6, 6]} />
+                <meshStandardMaterial color="#fcc419" />
+              </mesh>
+              {/* Grand entrance doors on south face — faces the PATH tiles at z=43 */}
+              <mesh position={[0, 0.8, 1.01]} castShadow>
+                <boxGeometry args={[1.6, 1.6, 0.06]} />
+                <meshStandardMaterial color="#343a40" roughness={0.5} />
+              </mesh>
+              <mesh position={[-0.4, 0.8, 1.04]}>
+                <boxGeometry args={[0.7, 1.3, 0.02]} />
+                <meshStandardMaterial color="#1c7ed6" roughness={0.3} />
+              </mesh>
+              <mesh position={[0.4, 0.8, 1.04]}>
+                <boxGeometry args={[0.7, 1.3, 0.02]} />
+                <meshStandardMaterial color="#1c7ed6" roughness={0.3} />
+              </mesh>
+              {/* GYM sign above door */}
+              <mesh position={[0, 2.2, 1.01]}>
+                <boxGeometry args={[1.8, 0.35, 0.06]} />
+                <meshStandardMaterial color="#fab005" roughness={0.5} />
+              </mesh>
+              <mesh position={[0, 2.2, 1.03]}>
+                <boxGeometry args={[1.6, 0.25, 0.02]} />
+                <meshStandardMaterial color="#1a1b1e" />
+              </mesh>
+              {/* Pillars flanking entrance */}
+              <mesh position={[-0.9, 0.85, 1.01]} castShadow>
+                <cylinderGeometry args={[0.08, 0.1, 1.7, 8]} />
+                <meshStandardMaterial color="#868e96" roughness={0.6} />
+              </mesh>
+              <mesh position={[0.9, 0.85, 1.01]} castShadow>
+                <cylinderGeometry args={[0.08, 0.1, 1.7, 8]} />
+                <meshStandardMaterial color="#868e96" roughness={0.6} />
+              </mesh>
+              {/* Side windows (tall, narrow) */}
+              <mesh position={[-2.5, 1.4, 1.01]}>
+                <boxGeometry args={[0.3, 1.0, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.5} roughness={0.1} />
+              </mesh>
+              <mesh position={[2.5, 1.4, 1.01]}>
+                <boxGeometry args={[0.3, 1.0, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.5} roughness={0.1} />
+              </mesh>
+              <mesh position={[-2.5, 1.4, -1.01]}>
+                <boxGeometry args={[0.3, 1.0, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.5} roughness={0.1} />
+              </mesh>
+              <mesh position={[2.5, 1.4, -1.01]}>
+                <boxGeometry args={[0.3, 1.0, 0.04]} />
+                <meshStandardMaterial color="#74c0fc" transparent opacity={0.5} roughness={0.1} />
+              </mesh>
+              {/* Entrance steps */}
+              <mesh position={[0, 0.04, 1.35]} receiveShadow>
+                <boxGeometry args={[2.0, 0.08, 0.5]} />
+                <meshStandardMaterial color="#868e96" roughness={0.8} />
+              </mesh>
+            </group>
+          );
+        }
+        if (x >= 4 && x <= 10 && z >= 41 && z <= 42) return null;
+
         // Town Picket Fences along edge blocks (Fences look more high-fidelity than just trees everywhere)
         const isBoundaryFence = x === 0 || x === MAP_WIDTH - 1 || z === 0 || z === MAP_HEIGHT - 1;
         if (isBoundaryFence) {
@@ -1275,6 +1657,16 @@ export function World() {
       {/* Rival Gary: Stands in front of his house (10, 5) */}
       <group ref={rivalGroupRef} position={[10, 0, 5]}>
         <TrainerModel role="RIVAL" heading={rivalHeading} state={rivalPacingState} scale={0.9} />
+      </group>
+
+      {/* Bug Catcher: Wandering Route 1 eastern grass (11, 18) */}
+      <group ref={bugCatcherGroupRef} position={[11, 0, 18]}>
+        <TrainerModel role="TRAINER" heading={bcHeading} state={bcPacingState} scale={0.88} />
+      </group>
+
+      {/* Youngster: Wandering Route 1 western grass (4, 22) */}
+      <group ref={youngsterGroupRef} position={[4, 0, 22]}>
+        <TrainerModel role="TRAINER" heading={ysHeading} state={ysPacingState} scale={0.88} />
       </group>
 
       {/* Wild Pikachu Mascot: Hopping around grass (4, 6) */}
@@ -1453,17 +1845,14 @@ export function World() {
         </mesh>
         {/* Route 1 Shield Sign */}
         <group position={[0, 1.25, 0.02]}>
-          {/* Green shield background */}
           <mesh castShadow>
             <boxGeometry args={[0.28, 0.22, 0.04]} />
             <meshStandardMaterial color="#2b8a3e" roughness={0.5} />
           </mesh>
-          {/* White border */}
           <mesh position={[0, 0, 0.022]}>
             <boxGeometry args={[0.24, 0.18, 0.01]} />
             <meshStandardMaterial color="#f8f9fa" roughness={0.3} />
           </mesh>
-          {/* Route number indicators via colored dots */}
           <mesh position={[-0.07, 0.05, 0.032]}>
             <boxGeometry args={[0.03, 0.03, 0.01]} />
             <meshStandardMaterial color="#1a1b1e" />
@@ -1472,18 +1861,15 @@ export function World() {
             <boxGeometry args={[0.03, 0.03, 0.01]} />
             <meshStandardMaterial color="#1a1b1e" />
           </mesh>
-          {/* "1" indicator bar */}
           <mesh position={[0, -0.03, 0.032]}>
             <boxGeometry args={[0.06, 0.04, 0.01]} />
             <meshStandardMaterial color="#1a1b1e" />
           </mesh>
         </group>
-        {/* Directional arrow pointing down */}
         <mesh position={[0, 1.0, 0.03]} rotation={[0, 0, Math.PI]} castShadow>
           <coneGeometry args={[0.05, 0.08, 4]} />
           <meshStandardMaterial color="#fab005" />
         </mesh>
-        {/* Little sign text lines */}
         <mesh position={[0, 0.92, 0.03]}>
           <boxGeometry args={[0.05, 0.015, 0.01]} />
           <meshStandardMaterial color="#f8f9fa" />
@@ -1491,6 +1877,390 @@ export function World() {
         <mesh position={[0, 0.88, 0.03]}>
           <boxGeometry args={[0.03, 0.015, 0.01]} />
           <meshStandardMaterial color="#f8f9fa" />
+        </mesh>
+      </group>
+
+      {/* ===== ROUTE 1 SIGN (7, 15) ===== */}
+      <group position={[7, 0, 15]}>
+        <mesh position={[0, 0.55, 0]} castShadow>
+          <cylinderGeometry args={[0.04, 0.05, 1.1, 7]} />
+          <meshStandardMaterial color="#8c5a3c" roughness={0.9} />
+        </mesh>
+        <mesh position={[0, 1.05, -0.02]} castShadow>
+          <boxGeometry args={[0.32, 0.04, 0.06]} />
+          <meshStandardMaterial color="#6a4c33" roughness={0.9} />
+        </mesh>
+        <group position={[0, 1.25, 0.02]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.28, 0.22, 0.04]} />
+            <meshStandardMaterial color="#2b8a3e" roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 0, 0.022]}>
+            <boxGeometry args={[0.24, 0.18, 0.01]} />
+            <meshStandardMaterial color="#f8f9fa" roughness={0.3} />
+          </mesh>
+          <mesh position={[0, 0.05, 0.032]}>
+            <boxGeometry args={[0.06, 0.03, 0.01]} />
+            <meshStandardMaterial color="#1a1b1e" />
+          </mesh>
+          <mesh position={[0, -0.03, 0.032]}>
+            <boxGeometry args={[0.05, 0.04, 0.01]} />
+            <meshStandardMaterial color="#1a1b1e" />
+          </mesh>
+        </group>
+        <mesh position={[0, 1.0, 0.03]} rotation={[0, 0, Math.PI]} castShadow>
+          <coneGeometry args={[0.05, 0.08, 4]} />
+          <meshStandardMaterial color="#fab005" />
+        </mesh>
+      </group>
+
+      {/* ===== ROUTE 1 HIDDEN BERRY BUSH (7, 20) ===== */}
+      <group position={[7, 0, 20]}>
+        <mesh position={[0, 0.04, 0]} receiveShadow castShadow>
+          <cylinderGeometry args={[0.28, 0.34, 0.08, 8]} />
+          <meshStandardMaterial color="#5c3e10" roughness={1.0} />
+        </mesh>
+        <mesh position={[0, 0.22, 0]} castShadow>
+          <sphereGeometry args={[0.28, 7, 7]} />
+          <meshStandardMaterial color="#2b8a3e" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[0.12, 0.3, 0.08]} castShadow>
+          <sphereGeometry args={[0.2, 6, 6]} />
+          <meshStandardMaterial color="#37b24d" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[-0.08, 0.32, -0.06]} castShadow>
+          <sphereGeometry args={[0.18, 6, 6]} />
+          <meshStandardMaterial color="#40c057" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[0, 0.38, 0]} castShadow>
+          <sphereGeometry args={[0.14, 5, 5]} />
+          <meshStandardMaterial color="#51cf66" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[-0.1, 0.28, 0.15]} castShadow>
+          <sphereGeometry args={[0.035, 6, 6]} />
+          <meshStandardMaterial color="#e03131" roughness={0.3} />
+        </mesh>
+        <mesh position={[0.12, 0.34, -0.05]} castShadow>
+          <sphereGeometry args={[0.03, 6, 6]} />
+          <meshStandardMaterial color="#fa5252" roughness={0.3} />
+        </mesh>
+        <mesh position={[-0.06, 0.4, 0.04]} castShadow>
+          <sphereGeometry args={[0.028, 6, 6]} />
+          <meshStandardMaterial color="#ff6b6b" roughness={0.3} />
+        </mesh>
+        <mesh position={[0.08, 0.26, -0.12]} castShadow>
+          <sphereGeometry args={[0.032, 6, 6]} />
+          <meshStandardMaterial color="#c92a2a" roughness={0.3} />
+        </mesh>
+        <mesh position={[-0.14, 0.22, -0.08]} castShadow>
+          <sphereGeometry args={[0.025, 6, 6]} />
+          <meshStandardMaterial color="#e03131" roughness={0.3} />
+        </mesh>
+        <mesh position={[0.08, 0.2, 0.12]} rotation={[0.3, 0.5, 0]}>
+          <boxGeometry args={[0.04, 0.02, 0.04]} />
+          <meshStandardMaterial color="#51cf66" roughness={0.8} />
+        </mesh>
+        <mesh position={[-0.1, 0.18, -0.1]} rotation={[-0.2, -0.3, 0]}>
+          <boxGeometry args={[0.04, 0.02, 0.04]} />
+          <meshStandardMaterial color="#69db7c" roughness={0.8} />
+        </mesh>
+      </group>
+
+      {/* ===== ROUTE 1 HIDDEN ITEM SPARKLES ===== */}
+      {/* Hidden Potion (1, 16) — sparkling bush */}
+      <group position={[1, 0.12, 16]}>
+        <mesh>
+          <sphereGeometry args={[0.02, 4, 4]} />
+          <meshBasicMaterial color="#ffd43b" transparent opacity={0.8} toneMapped={false} />
+        </mesh>
+        <mesh position={[0.05, 0.03, 0.03]}>
+          <sphereGeometry args={[0.015, 4, 4]} />
+          <meshBasicMaterial color="#fab005" transparent opacity={0.6} toneMapped={false} />
+        </mesh>
+      </group>
+      {/* Hidden Poké Ball (13, 18) — shiny grass */}
+      <group position={[13, 0.1, 18]}>
+        <mesh>
+          <sphereGeometry args={[0.025, 4, 4]} />
+          <meshBasicMaterial color="#fa5252" transparent opacity={0.7} toneMapped={false} />
+        </mesh>
+      </group>
+      {/* Hidden Antidote (4, 22) — sparkle in flowers */}
+      <group position={[4, 0.1, 22]}>
+        <mesh>
+          <sphereGeometry args={[0.02, 4, 4]} />
+          <meshBasicMaterial color="#69db7c" transparent opacity={0.8} toneMapped={false} />
+        </mesh>
+      </group>
+      {/* Hidden Super Potion (13, 23) — tree sparkle */}
+      <group position={[13, 0.12, 23]}>
+        <mesh>
+          <sphereGeometry args={[0.02, 4, 4]} />
+          <meshBasicMaterial color="#74c0fc" transparent opacity={0.7} toneMapped={false} />
+        </mesh>
+      </group>
+
+      {/* ===== VIRIDIAN FOREST HIDDEN ITEM SPARKLES ===== */}
+      {/* Hidden Poké Ball (10, 26) — hollow log glow */}
+      <group position={[10, 0.1, 26]}>
+        <mesh>
+          <sphereGeometry args={[0.025, 4, 4]} />
+          <meshBasicMaterial color="#fa5252" transparent opacity={0.7} toneMapped={false} />
+        </mesh>
+      </group>
+      {/* Hidden Antidote (1, 28) — fern sparkle */}
+      <group position={[1, 0.12, 28]}>
+        <mesh>
+          <sphereGeometry args={[0.02, 4, 4]} />
+          <meshBasicMaterial color="#69db7c" transparent opacity={0.8} toneMapped={false} />
+        </mesh>
+      </group>
+      {/* Hidden Great Ball (13, 30) — wall sparkle */}
+      <group position={[13, 0.08, 30]}>
+        <mesh>
+          <sphereGeometry args={[0.025, 4, 4]} />
+          <meshBasicMaterial color="#228be6" transparent opacity={0.7} toneMapped={false} />
+        </mesh>
+      </group>
+      {/* Hidden Super Potion (4, 32) — clearing sparkle */}
+      <group position={[4, 0.1, 32]}>
+        <mesh>
+          <sphereGeometry args={[0.02, 4, 4]} />
+          <meshBasicMaterial color="#74c0fc" transparent opacity={0.8} toneMapped={false} />
+        </mesh>
+      </group>
+      {/* Hidden Hyper Potion (12, 33) — rare gold sparkle */}
+      <group position={[12, 0.15, 33]}>
+        <mesh>
+          <sphereGeometry args={[0.03, 4, 4]} />
+          <meshBasicMaterial color="#ffd700" transparent opacity={0.9} toneMapped={false} />
+        </mesh>
+        <mesh position={[0.04, 0.04, 0.03]}>
+          <sphereGeometry args={[0.02, 4, 4]} />
+          <meshBasicMaterial color="#ffec99" transparent opacity={0.6} toneMapped={false} />
+        </mesh>
+      </group>
+
+      {/* ===== WILD FLOWER FIELD (3, 18) ===== */}
+      <group position={[3, 0, 18]}>
+        <mesh position={[0, 0.02, 0]} receiveShadow>
+          <boxGeometry args={[0.6, 0.04, 0.6]} />
+          <meshStandardMaterial color="#5c3e10" roughness={0.9} />
+        </mesh>
+        <mesh position={[-0.15, 0.1, -0.12]} castShadow>
+          <sphereGeometry args={[0.05, 5, 5]} />
+          <meshStandardMaterial color="#748ffc" roughness={0.4} />
+        </mesh>
+        <mesh position={[0.15, 0.12, 0.1]} castShadow>
+          <sphereGeometry args={[0.06, 5, 5]} />
+          <meshStandardMaterial color="#fcc419" roughness={0.4} />
+        </mesh>
+        <mesh position={[-0.05, 0.08, 0.15]} castShadow>
+          <sphereGeometry args={[0.04, 5, 5]} />
+          <meshStandardMaterial color="#748ffc" roughness={0.4} />
+        </mesh>
+        <mesh position={[0.12, 0.1, -0.08]} castShadow>
+          <sphereGeometry args={[0.045, 5, 5]} />
+          <meshStandardMaterial color="#fcc419" roughness={0.4} />
+        </mesh>
+        <mesh position={[-0.1, 0.06, -0.05]} castShadow>
+          <cylinderGeometry args={[0.01, 0.01, 0.08, 4]} />
+          <meshStandardMaterial color="#51cf66" roughness={0.8} />
+        </mesh>
+        <mesh position={[0.08, 0.06, 0.05]} castShadow>
+          <cylinderGeometry args={[0.01, 0.01, 0.08, 4]} />
+          <meshStandardMaterial color="#51cf66" roughness={0.8} />
+        </mesh>
+      </group>
+
+      {/* ===== WEATHERED TREE STUMP (11, 22) ===== */}
+      <group position={[11, 0, 22]}>
+        <mesh position={[0, 0.08, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[0.22, 0.28, 0.16, 7]} />
+          <meshStandardMaterial color="#6a4c33" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[0, 0.16, 0]} castShadow>
+          <cylinderGeometry args={[0.18, 0.22, 0.06, 7]} />
+          <meshStandardMaterial color="#8c5a3c" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[0.05, 0.19, 0.04]} castShadow>
+          <sphereGeometry args={[0.025, 4, 4]} />
+          <meshStandardMaterial color="#adb5bd" roughness={0.7} />
+        </mesh>
+        <mesh position={[0, 0.06, 0.22]} castShadow>
+          <cylinderGeometry args={[0.02, 0.02, 0.12, 4]} />
+          <meshStandardMaterial color="#51cf66" roughness={0.8} />
+        </mesh>
+        <mesh position={[-0.1, 0.06, 0.16]} castShadow>
+          <cylinderGeometry args={[0.015, 0.015, 0.1, 4]} />
+          <meshStandardMaterial color="#40c057" roughness={0.8} />
+        </mesh>
+        {/* Tiny ring markings */}
+        <mesh position={[0, 0.08, 0.1]}>
+          <torusGeometry args={[0.06, 0.008, 4, 8]} />
+          <meshStandardMaterial color="#495057" roughness={0.9} />
+        </mesh>
+      </group>
+
+      {/* ===== VIRIDIAN FOREST ENTRANCE ARCH (7, 24) ===== */}
+      <group position={[7, 0, 24]}>
+        {/* Left post */}
+        <mesh position={[-0.45, 0.7, 0]} castShadow>
+          <cylinderGeometry args={[0.05, 0.06, 1.4, 7]} />
+          <meshStandardMaterial color="#5c3e10" roughness={0.9} />
+        </mesh>
+        {/* Right post */}
+        <mesh position={[0.45, 0.7, 0]} castShadow>
+          <cylinderGeometry args={[0.05, 0.06, 1.4, 7]} />
+          <meshStandardMaterial color="#5c3e10" roughness={0.9} />
+        </mesh>
+        {/* Arch top beam */}
+        <mesh position={[0, 1.45, 0]} castShadow>
+          <boxGeometry args={[1.0, 0.06, 0.08]} />
+          <meshStandardMaterial color="#6a4c33" roughness={0.9} />
+        </mesh>
+        {/* Arch sign board */}
+        <mesh position={[0, 1.35, 0.02]} castShadow>
+          <boxGeometry args={[0.7, 0.28, 0.04]} />
+          <meshStandardMaterial color="#2b8a3e" roughness={0.5} />
+        </mesh>
+        <mesh position={[0, 1.35, 0.03]}>
+          <boxGeometry args={[0.62, 0.2, 0.01]} />
+          <meshStandardMaterial color="#e9ecef" roughness={0.3} />
+        </mesh>
+        {/* Leaf decorations */}
+        <mesh position={[-0.35, 0.3, 0.05]} castShadow rotation={[0, 0, 0.3]}>
+          <boxGeometry args={[0.08, 0.05, 0.02]} />
+          <meshStandardMaterial color="#37b24d" roughness={0.8} />
+        </mesh>
+        <mesh position={[0.35, 0.3, 0.05]} castShadow rotation={[0, 0, -0.3]}>
+          <boxGeometry args={[0.08, 0.05, 0.02]} />
+          <meshStandardMaterial color="#2f9e44" roughness={0.8} />
+        </mesh>
+      </group>
+
+      {/* ===== VIRIDIAN FOREST EXIT MARKER (7, 34) ===== */}
+      <group position={[7, 0, 34]}>
+        <mesh position={[0, 0.5, 0]} castShadow>
+          <cylinderGeometry args={[0.035, 0.045, 1.0, 7]} />
+          <meshStandardMaterial color="#8c5a3c" roughness={0.9} />
+        </mesh>
+        <mesh position={[0, 0.95, -0.02]} castShadow>
+          <boxGeometry args={[0.24, 0.04, 0.06]} />
+          <meshStandardMaterial color="#6a4c33" roughness={0.9} />
+        </mesh>
+        <group position={[0, 1.12, 0.02]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.2, 0.18, 0.04]} />
+            <meshStandardMaterial color="#2b8a3e" roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 0.03, 0.022]}>
+            <boxGeometry args={[0.06, 0.05, 0.01]} />
+            <meshStandardMaterial color="#f8f9fa" />
+          </mesh>
+          <mesh position={[0, -0.05, 0.022]}>
+            <boxGeometry args={[0.08, 0.04, 0.01]} />
+            <meshStandardMaterial color="#f8f9fa" />
+          </mesh>
+        </group>
+      </group>
+
+      {/* ===== FOREST MOSS-COVERED ROCK (2, 27) ===== */}
+      <group position={[2, 0, 27]}>
+        <mesh position={[0, 0.08, 0]} castShadow receiveShadow>
+          <dodecahedronGeometry args={[0.18, 0]} />
+          <meshStandardMaterial color="#868e96" roughness={0.9} flatShading />
+        </mesh>
+        <mesh position={[0.08, 0.12, 0.06]} castShadow>
+          <dodecahedronGeometry args={[0.08, 0]} />
+          <meshStandardMaterial color="#6c757d" roughness={0.9} flatShading />
+        </mesh>
+        {/* Moss patches */}
+        <mesh position={[-0.05, 0.16, 0.08]}>
+          <sphereGeometry args={[0.05, 4, 4]} />
+          <meshStandardMaterial color="#40c057" roughness={0.8} />
+        </mesh>
+        <mesh position={[0.06, 0.14, -0.04]}>
+          <sphereGeometry args={[0.035, 4, 4]} />
+          <meshStandardMaterial color="#37b24d" roughness={0.8} />
+        </mesh>
+      </group>
+
+      {/* ===== FOREST FALLEN LOG (12, 29) ===== */}
+      <group position={[12, 0, 29]}>
+        {/* Main log body */}
+        <mesh position={[0, 0.1, 0]} rotation={[0, 0.6, 0.15]} castShadow receiveShadow>
+          <cylinderGeometry args={[0.08, 0.12, 0.7, 7]} />
+          <meshStandardMaterial color="#6a4c33" roughness={0.9} flatShading />
+        </mesh>
+        {/* Tiny mushrooms on log */}
+        <mesh position={[0.15, 0.16, 0.1]} castShadow>
+          <cylinderGeometry args={[0.012, 0.016, 0.04, 5]} />
+          <meshStandardMaterial color="#f1f3f5" roughness={0.8} />
+        </mesh>
+        <mesh position={[0.15, 0.2, 0.1]} castShadow>
+          <sphereGeometry args={[0.025, 4, 4, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color="#f783ac" roughness={0.6} />
+        </mesh>
+        <mesh position={[0.22, 0.15, 0.06]} castShadow>
+          <cylinderGeometry args={[0.01, 0.012, 0.03, 5]} />
+          <meshStandardMaterial color="#f1f3f5" roughness={0.8} />
+        </mesh>
+        <mesh position={[0.22, 0.18, 0.06]} castShadow>
+          <sphereGeometry args={[0.018, 4, 4, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color="#fab005" roughness={0.6} />
+        </mesh>
+      </group>
+
+      {/* ===== FOREST CLEARING SPRING (8, 32) ===== */}
+      <group position={[8, 0, 32]}>
+        {/* Stone ring */}
+        <mesh position={[0, 0.03, 0]} receiveShadow>
+          <torusGeometry args={[0.2, 0.04, 6, 12]} />
+          <meshStandardMaterial color="#868e96" roughness={0.9} />
+        </mesh>
+        {/* Water surface */}
+        <mesh position={[0, 0.05, 0]}>
+          <circleGeometry args={[0.16, 12]} />
+          <meshStandardMaterial color="#4dabf7" transparent opacity={0.7} roughness={0.1} metalness={0.5} />
+        </mesh>
+        {/* Glowing water center */}
+        <mesh position={[0, 0.06, 0]}>
+          <circleGeometry args={[0.06, 8]} />
+          <meshStandardMaterial color="#a5d8ff" transparent opacity={0.5} />
+        </mesh>
+        {/* Sparkle effect */}
+        <mesh position={[0.04, 0.07, 0.04]}>
+          <sphereGeometry args={[0.015, 4, 4]} />
+          <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={1.0} />
+        </mesh>
+      </group>
+
+      {/* ===== ANCIENT FOREST ALTAR (2, 33) ===== */}
+      <group position={[2, 0, 33]}>
+        {/* Base stone */}
+        <mesh position={[0, 0.06, 0]} receiveShadow castShadow>
+          <boxGeometry args={[0.3, 0.12, 0.3]} />
+          <meshStandardMaterial color="#6c757d" roughness={0.9} />
+        </mesh>
+        {/* Upper stone */}
+        <mesh position={[0, 0.18, 0]} castShadow>
+          <boxGeometry args={[0.22, 0.1, 0.22]} />
+          <meshStandardMaterial color="#adb5bd" roughness={0.8} />
+        </mesh>
+        {/* Vine patterns */}
+        <mesh position={[0.1, 0.18, 0.08]}>
+          <cylinderGeometry args={[0.008, 0.008, 0.1, 4]} />
+          <meshStandardMaterial color="#2b8a3e" roughness={0.9} />
+        </mesh>
+        <mesh position={[-0.08, 0.18, -0.1]}>
+          <cylinderGeometry args={[0.008, 0.008, 0.08, 4]} />
+          <meshStandardMaterial color="#37b24d" roughness={0.9} />
+        </mesh>
+        {/* Mystical glow */}
+        <mesh position={[0, 0.22, 0]}>
+          <sphereGeometry args={[0.03, 6, 6]} />
+          <meshStandardMaterial color="#51cf66" emissive="#40c057" emissiveIntensity={0.6} />
         </mesh>
       </group>
 

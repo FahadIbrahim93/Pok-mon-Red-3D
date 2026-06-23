@@ -31,13 +31,27 @@ export function usePlayerControls() {
         if (e.key === 'z' || e.key === 'x' || e.key === 'Enter' || e.key === ' ') {
           actions.clearDialogue();
           // Check if there's a pending rival battle after clearing dialogue
-          const pending = (window as any).__pendingRivalBattle;
-          const opponent = (window as any).__rivalOpponent;
-          // Always clear pending battle flags
+          // Check for rival battle pending
+          const pendingRival = (window as any).__pendingRivalBattle;
+          const rivalOpponent = (window as any).__rivalOpponent;
+          // Always clear rival battle flags
           (window as any).__pendingRivalBattle = false;
           (window as any).__rivalOpponent = null;
-          if (pending && opponent) {
-            actions.startTrainerBattle(opponent, 'RIVAL GARY');
+          if (pendingRival && rivalOpponent) {
+            actions.startTrainerBattle(rivalOpponent, 'RIVAL GARY');
+            return;
+          }
+          // Check for route trainer battle pending
+          const routeTrainerId = (window as any).__pendingRouteTrainerBattle;
+          const routeTrainerTeam: any[] = (window as any).__pendingRouteTrainerTeam || [];
+          const routeTrainerName: string = (window as any).__pendingRouteTrainerName || '';
+          // Always clear route trainer flags
+          (window as any).__pendingRouteTrainerBattle = null;
+          (window as any).__pendingRouteTrainerTeam = null;
+          (window as any).__pendingRouteTrainerName = null;
+          if (routeTrainerId && routeTrainerTeam.length > 0 && routeTrainerName) {
+            const firstMon = routeTrainerTeam[0];
+            actions.startTrainerBattle(firstMon, routeTrainerName);
           }
         }
         return;
@@ -111,7 +125,7 @@ export function usePlayerControls() {
           const state = useGameStore.getState();
           // Rival Gary battle — check if already defeated or player has no Pokémon
           if (targetX === 10 && targetZ === 5) {
-            if (state.defeatedTrainers.includes('GARY')) {
+            if (state.defeatedTrainers.includes('RIVAL GARY')) {
               actions.showDialogue("RIVAL GARY: 'What are you looking at? I already beat you once! Smell ya later!'");
               return;
             }
@@ -138,7 +152,10 @@ export function usePlayerControls() {
           if (targetX === 8 && targetZ === 7 && state.party.length === 0) {
             actions.openStarterModal();
           } else if (targetX === 2 && targetZ === 9) {
-            // Pokémon Center — heal all Pokémon
+            // Pallet Town Pokémon Center — heal all Pokémon
+            actions.usePokemonCenter();
+          } else if (targetX === 2 && targetZ === 39) {
+            // Viridian City Pokémon Center — heal all Pokémon
             actions.usePokemonCenter();
           } else if (targetX === 12 && targetZ === 9) {
             // Poké Mart — show shop dialogue with item list
@@ -146,6 +163,34 @@ export function usePlayerControls() {
             actions.showDialogue(
               `POKÉ MART CLERK: 'Welcome, trainer! We've got:\n[1] Potion (200g) — Restores 20 HP\n[2] Super Potion (500g) — Restores 50 HP\n[3] Poké Ball (200g) — Catch wild Pokémon\n[4] Great Ball (600g) — Better catch rate\n[5] Antidote (100g) — Cures poison\n\nYou have ${gold} gold.\nPress 1-5 to buy, or Z to leave.'`
             );
+          } else if (targetX === 12 && targetZ === 39) {
+            // Viridian City Poké Mart — show shop dialogue
+            const gold = state.gold ?? 0;
+            actions.showDialogue(
+              `POKÉ MART CLERK: 'Welcome, traveler! We've got:\n[1] Potion (200g) — Restores 20 HP\n[2] Super Potion (500g) — Restores 50 HP\n[3] Poké Ball (200g) — Catch wild Pokémon\n[4] Great Ball (600g) — Better catch rate\n[5] Antidote (100g) — Cures poison\n\nYou have ${gold} gold.\nPress 1-5 to buy, or Z to leave.'`
+            );
+          } else if (text && text.startsWith('HIDDEN ITEM:')) {
+            // Route hidden item system — map interaction coordinates to items
+            const hiddenItems: Record<string, { itemName: string; quantity: number; displayName: string; description: string }> = {
+              // Route 1
+              '1,16': { itemName: 'POTION', quantity: 2, displayName: 'Potion', description: 'hidden bush near the Route 1 entrance' },
+              '13,18': { itemName: 'POKEBALL', quantity: 3, displayName: 'Poké-Ball', description: 'tall grass along the eastern path' },
+              '4,22': { itemName: 'ANTIDOTE', quantity: 2, displayName: 'Antidote', description: 'wildflower field on Route 1' },
+              '13,23': { itemName: 'SUPER_POTION', quantity: 1, displayName: 'Super Potion', description: 'hollow tree on Route 1' },
+              // Viridian Forest
+              '10,26': { itemName: 'POKEBALL', quantity: 2, displayName: 'Poké-Ball', description: 'hollow tree in Viridian Forest' },
+              '1,28': { itemName: 'ANTIDOTE', quantity: 1, displayName: 'Antidote', description: 'fern thicket in Viridian Forest' },
+              '13,30': { itemName: 'GREATBALL', quantity: 1, displayName: 'Great Ball', description: 'buried cache near the forest wall' },
+              '4,32': { itemName: 'SUPER_POTION', quantity: 2, displayName: 'Super Potion', description: 'forest clearing in Viridian Forest' },
+              '12,33': { itemName: 'HYPER_POTION', quantity: 1, displayName: 'Hyper Potion', description: 'ancient tree root in the deep forest' },
+            };
+            const key = `${targetX},${targetZ}`;
+            const hiddenItem = hiddenItems[key];
+            if (hiddenItem) {
+              actions.claimHiddenRouteItem(key, hiddenItem.itemName, hiddenItem.quantity, hiddenItem.displayName, hiddenItem.description);
+            } else {
+              actions.showDialogue(text);
+            }
           } else {
             actions.showDialogue(text);
             

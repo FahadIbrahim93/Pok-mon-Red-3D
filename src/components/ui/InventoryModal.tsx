@@ -445,6 +445,10 @@ export function InventoryModal() {
                     const isRivalHouse = col >= 8 && col <= 10 && row >= 2 && row <= 3;
                     const isLab = col >= 5 && col <= 8 && row >= 8 && row <= 9;
                     const isSign = col === 8 && row === 4;
+                    // Viridian City landmarks (mapped to visible grid area)
+                    const isGym = row >= 10 && row <= 11 && col >= 4 && col <= 7; // Gym area
+                    const isCityCenter = row >= 9 && row <= 10 && col >= 1 && col <= 3; // PokeCenter area
+                    const isCityMart = row >= 9 && row <= 10 && col >= 9 && col <= 11; // PokeMart area
 
                     // Player live coordinate position highlight [position[0], position[1]]
                     const isPlayerHere = col === position[0] && row === position[1];
@@ -467,6 +471,15 @@ export function InventoryModal() {
                     } else if (isLab) {
                       cellStyle = 'bg-[#099268] rounded';
                       tileIcon = '🔬';
+                    } else if (isGym) {
+                      cellStyle = 'bg-[#fcc419] rounded';
+                      tileIcon = '🏟️';
+                    } else if (isCityCenter) {
+                      cellStyle = 'bg-[#e03131] rounded';
+                      tileIcon = '🏥';
+                    } else if (isCityMart) {
+                      cellStyle = 'bg-[#1c7ed6] rounded';
+                      tileIcon = '🏪';
                     } else if (row >= 5 && row <= 7 && col >= 2 && col <= 9) { // High grass center
                       cellStyle = 'bg-green-900/40';
                       tileIcon = '🌿';
@@ -508,7 +521,13 @@ export function InventoryModal() {
                     (position[0] >= 2 && position[0] <= 4 && position[1] >= 2 && position[1] <= 3) ? 'PLAYER RED\'S HOUSE' :
                     (position[0] >= 8 && position[0] <= 10 && position[1] >= 2 && position[1] <= 3) ? 'RIVAL GARY\'S HOUSE' :
                     (position[0] >= 5 && position[0] <= 9 && position[1] >= 8 && position[1] <= 10) ? 'PROFESSOR OAK RESEARCH LAB' :
-                    (position[1] >= 5 && position[1] <= 7 && position[0] >= 2 && position[0] <= 9) ? 'WILD GRASS DENSITY REGION' : 'PALLET TOWN STREET'
+                    (position[1] >= 5 && position[1] <= 7 && position[0] >= 2 && position[0] <= 9) ? 'WILD GRASS DENSITY REGION' :
+                    (position[0] >= 1 && position[0] <= 3 && position[1] >= 37 && position[1] <= 40) ? 'VIRIDIAN POKÉMON CENTER' :
+                    (position[0] >= 11 && position[0] <= 13 && position[1] >= 37 && position[1] <= 40) ? 'VIRIDIAN POKÉ MART' :
+                    (position[0] >= 4 && position[0] <= 10 && position[1] >= 41 && position[1] <= 43) ? 'VIRIDIAN GYM' :
+                    (position[1] >= 35 && position[1] <= 49) ? 'VIRIDIAN CITY' :
+                    (position[1] >= 25 && position[1] <= 34) ? 'VIRIDIAN FOREST' :
+                    (position[1] >= 15 && position[1] <= 24) ? 'ROUTE 1' : 'PALLET TOWN'
                   }</div>
                 </div>
                 <button

@@ -1630,6 +1630,22 @@ export const ENCOUNTER_TABLES: Record<string, EncounterTable> = {
       { name: 'KAKUNA', weight: 5 },
       { name: 'PIKACHU', weight: 4 },
     ]
+  },
+  // Viridian Forest - dense bug habitat
+  VIRIDIAN_FOREST: {
+    minLevel: 5, maxLevel: 12,
+    species: [
+      { name: 'WEEDLE', weight: 22 },
+      { name: 'CATERPIE', weight: 18 },
+      { name: 'ODDISH', weight: 12 },
+      { name: 'PARAS', weight: 10 },
+      { name: 'VENONAT', weight: 10 },
+      { name: 'PIKACHU', weight: 8 },
+      { name: 'BELLSPROUT', weight: 8 },
+      { name: 'METAPOD', weight: 5 },
+      { name: 'KAKUNA', weight: 5 },
+      { name: 'PIDGEY', weight: 2 },
+    ]
   }
 };
 
@@ -1689,6 +1705,109 @@ export const generateRivalTeam = (playerStarterName: string): Pokemon[] => {
 };
 
 // Generate a wild Pokémon from a specific encounter table
+// Generate a Route 1 trainer's team based on trainer ID
+export const generateRoute1TrainerTeam = (trainerId: string): Pokemon[] => {
+  const team: Pokemon[] = [];
+
+  if (trainerId === 'BUG_CATCHER_1') {
+    // Bug Catcher: Weedle Lv 7 + Caterpie Lv 6
+    const weedleEntry = POKEDEX_CATALOG.WEEDLE;
+    const caterpieEntry = POKEDEX_CATALOG.CATERPIE;
+
+    if (weedleEntry) {
+      const level = 7;
+      const maxHp = weedleEntry.baseHp + (level * 2);
+      team.push({
+        id: 'trainer_1a',
+        name: 'WEEDLE',
+        level,
+        hp: maxHp,
+        maxHp: maxHp,
+        color: weedleEntry.color,
+        moves: weedleEntry.moves.slice(0, 2).map(m => ({
+          ...m,
+          category: m.power > 0 ? 'PHYSICAL' as const : 'STATUS' as const
+        })) as Move[]
+      });
+    }
+    if (caterpieEntry) {
+      const level = 6;
+      const maxHp = caterpieEntry.baseHp + (level * 2);
+      team.push({
+        id: 'trainer_1b',
+        name: 'CATERPIE',
+        level,
+        hp: maxHp,
+        maxHp: maxHp,
+        color: caterpieEntry.color,
+        moves: caterpieEntry.moves.slice(0, 2).map(m => ({
+          ...m,
+          category: m.power > 0 ? 'PHYSICAL' as const : 'STATUS' as const
+        })) as Move[]
+      });
+    }
+  } else if (trainerId === 'YOUNGSTER_1') {
+    // Youngster: Rattata Lv 8 + Spearow Lv 7
+    const rattataEntry = POKEDEX_CATALOG.RATTATA;
+    const spearowEntry = POKEDEX_CATALOG.SPEAROW;
+
+    if (rattataEntry) {
+      const level = 8;
+      const maxHp = rattataEntry.baseHp + (level * 2);
+      team.push({
+        id: 'trainer_2a',
+        name: 'RATTATA',
+        level,
+        hp: maxHp,
+        maxHp: maxHp,
+        color: rattataEntry.color,
+        moves: rattataEntry.moves.slice(0, 2).map(m => ({
+          ...m,
+          category: m.power > 0 ? 'PHYSICAL' as const : 'STATUS' as const
+        })) as Move[]
+      });
+    }
+    if (spearowEntry) {
+      const level = 7;
+      const maxHp = spearowEntry.baseHp + (level * 2);
+      team.push({
+        id: 'trainer_2b',
+        name: 'SPEAROW',
+        level,
+        hp: maxHp,
+        maxHp: maxHp,
+        color: spearowEntry.color,
+        moves: spearowEntry.moves.slice(0, 2).map(m => ({
+          ...m,
+          category: m.power > 0 ? 'PHYSICAL' as const : 'STATUS' as const
+        })) as Move[]
+      });
+    }
+  }
+
+  // Fallback
+  if (team.length === 0) {
+    const fallback = POKEDEX_CATALOG.RATTATA;
+    const level = 6;
+    const maxHp = fallback.baseHp + (level * 2);
+    team.push({
+      id: 'trainer_fallback',
+      name: 'RATTATA',
+      level,
+      hp: maxHp,
+      maxHp: maxHp,
+      color: fallback.color,
+      moves: fallback.moves.slice(0, 2).map(m => ({
+        ...m,
+        category: m.power > 0 ? 'PHYSICAL' as const : 'STATUS' as const
+      })) as Move[]
+    });
+  }
+
+  return team;
+};
+
+
 export const generateWildPokemon = (tableKey?: string): Pokemon => {
   let table = ENCOUNTER_TABLES.GRASS_PALLET;
   

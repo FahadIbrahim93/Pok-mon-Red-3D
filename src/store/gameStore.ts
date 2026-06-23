@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { mapGrid, TileType } from '../game/MapData';
-import { POKEDEX_CATALOG, checkEvolution, generateWildPokemon } from '../game/pokemonData';
+import { mapGrid, TileType, TRAINER_NPCS } from '../game/MapData';
+import { POKEDEX_CATALOG, checkEvolution, generateWildPokemon, generateRoute1TrainerTeam } from '../game/pokemonData';
 import { soundManager } from '../game/soundManager';
 
 export type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
@@ -269,6 +269,7 @@ interface GameState {
   metOak: boolean;
   readSign: boolean;
   hiddenTreasureClaimed: boolean;
+  hiddenItemsClaimed: Record<string, boolean>;
   defeatedTrainers: string[];
 
   actions: {
@@ -307,6 +308,7 @@ interface GameState {
     toggleBgm: () => void;
     triggerReadSign: () => void;
     claimHiddenTreasure: () => void;
+    claimHiddenRouteItem: (itemKey: string, itemName: string, quantity: number, displayName: string, description: string) => void;
     usePokemonCenter: () => void;
     purchaseItem: (itemId: string) => void;
     setCenterHealing: (status: 'IDLE' | 'HEALING' | 'DONE') => void;
@@ -383,6 +385,7 @@ export const useGameStore = create<GameState>()(
       bgmEnabled: true,
       readSign: false,
   hiddenTreasureClaimed: false,
+  hiddenItemsClaimed: {},
   starterChosen: false,
   showStarterModal: false,
   centerHealing: 'IDLE',
@@ -405,8 +408,20 @@ export const useGameStore = create<GameState>()(
             // Checking if the step leads to a Wild Pokémon encounter in Grass
             if (tile === TileType.GRASS && state.mode === 'OVERWORLD') {
               if (Math.random() < 0.14) { // 14% step-encounter chance
-                // Route 1 area (z <= 5 north of town) uses ROUTE_1 encounter table
-                const encounterTable = z <= 5 ? 'ROUTE_1' : (x <= 4 || x >= 10 ? 'GRASS_FOREST' : 'GRASS_PALLET');
+                // Determine encounter table based on current zone
+                let encounterTable = 'GRASS_PALLET';
+                // No wild encounters in Viridian City
+                if (!(z >= 35)) {
+                  if (z <= 5) {
+                    encounterTable = 'ROUTE_1';
+                  } else if (z >= 15 && z <= 24) {
+                    encounterTable = 'ROUTE_1';
+                  } else if (z >= 25 && z <= 34) {
+                    encounterTable = 'VIRIDIAN_FOREST';
+                  } else if (x <= 4 || x >= 10) {
+                    encounterTable = 'GRASS_FOREST';
+                  }
+                }
                 const wildOpponent = generateWildPokemon(encounterTable);
                 
                 // Immediately register species as SEEN in our Pokedex
@@ -440,6 +455,31 @@ export const useGameStore = create<GameState>()(
               } else {
                 // Grass step sound effect
                 soundManager.playSFX('rustle');
+              }
+            }
+
+            // Check proximity to Route 1 wandering trainers (only if in overworld, have a party, and not already in dialogue)
+            if (finalState.mode === 'OVERWORLD' && state.party.length > 0 && !state.dialogue) {
+              const px = nextPos[0];
+              const pz = nextPos[1];
+              for (const trainer of TRAINER_NPCS) {
+                if (state.defeatedTrainers.includes(trainer.displayName)) continue;
+                const dist = Math.abs(px - trainer.x) + Math.abs(pz - trainer.z); // Manhattan distance
+                if (dist <= trainer.encounterRadius) {
+                  const team = generateRoute1TrainerTeam(trainer.id);
+                  const firstMon = team[0];
+                  if (firstMon) {
+                    finalState = {
+                      ...finalState,
+                      dialogue: trainer.dialogue,
+                    };
+                    // Set window flags for battle trigger after dialogue dismiss
+                    (window as any).__pendingRouteTrainerBattle = trainer.id;
+                    (window as any).__pendingRouteTrainerTeam = team;
+                    (window as any).__pendingRouteTrainerName = trainer.displayName;
+                  }
+                  break; // Only one trainer at a time
+                }
               }
             }
 
@@ -560,6 +600,10 @@ export const useGameStore = create<GameState>()(
               if (party[0] && party[0].hp > 0) {
                 if (trainerName === 'RIVAL GARY') {
                   dialogue = "RIVAL GARY: 'Argh! You got lucky, Red! I'll train even harder and beat you next time! Smell ya later!'";
+                } else if (trainerName === 'Bug Catcher') {
+                  dialogue = "BUG CATCHER: 'Aww man! My bugs did their best! You're really strong... I'll train harder!'";
+                } else if (trainerName === 'Youngster') {
+                  dialogue = "YOUNGSTER: 'No way! I lost?! All that training... I gotta get way stronger!'";
                 } else {
                   dialogue = `${trainerName}: 'You're pretty strong... I'll get you next time!'`;
                 }
@@ -850,6 +894,7 @@ export const useGameStore = create<GameState>()(
             bgmEnabled: true,
             readSign: false,
             hiddenTreasureClaimed: false,
+            hiddenItemsClaimed: {},
             starterChosen: false,
             showStarterModal: false,
             metOak: false,
@@ -1101,6 +1146,27 @@ export const useGameStore = create<GameState>()(
             return {
               readSign: true,
               quests: updatedQuests
+            };
+          });
+        },
+
+        claimHiddenRouteItem: (itemKey, itemName, quantity, displayName, description) => {
+          set((state) => {
+            const key = itemKey;
+            if (state.hiddenItemsClaimed[key]) {
+              return { dialogue: `This spot has already been picked clean. There's nothing left here.` };
+            }
+            const nextItems = state.inventoryItems.map(item => {
+              if (item.name === itemName) {
+                return { ...item, quantity: item.quantity + quantity };
+              }
+              return item;
+            });
+            soundManager.playSFX('level_up');
+            return {
+              hiddenItemsClaimed: { ...state.hiddenItemsClaimed, [key]: true },
+              inventoryItems: nextItems,
+              dialogue: `FOUND: Red discovered ${quantity}× ${displayName} hidden in the ${description}! It was added to your bag.`
             };
           });
         },
@@ -1357,6 +1423,7 @@ export const useGameStore = create<GameState>()(
         metOak: state.metOak,
         readSign: state.readSign,
         hiddenTreasureClaimed: state.hiddenTreasureClaimed,
+        hiddenItemsClaimed: state.hiddenItemsClaimed,
         starterChosen: state.starterChosen,
         defeatedTrainers: state.defeatedTrainers
       })
